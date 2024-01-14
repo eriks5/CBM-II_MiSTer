@@ -177,7 +177,7 @@ assign ADC_BUS  = 'Z;
 assign USER_OUT = '1;
 assign {UART_RTS, UART_TXD, UART_DTR} = 0;
 assign {SD_SCK, SD_MOSI, SD_CS} = 'Z;
-assign {SDRAM_DQ, SDRAM_A, SDRAM_BA, SDRAM_CLK, SDRAM_CKE, SDRAM_DQML, SDRAM_DQMH, SDRAM_nWE, SDRAM_nCAS, SDRAM_nRAS, SDRAM_nCS} = 'Z;
+// assign {SDRAM_DQ, SDRAM_A, SDRAM_BA, SDRAM_CLK, SDRAM_CKE, SDRAM_DQML, SDRAM_DQMH, SDRAM_nWE, SDRAM_nCAS, SDRAM_nRAS, SDRAM_nCS} = 'Z;
 assign {DDRAM_CLK, DDRAM_BURSTCNT, DDRAM_ADDR, DDRAM_DIN, DDRAM_BE, DDRAM_RD, DDRAM_WE} = '0;  
 
 assign VGA_SL = 0;
@@ -185,6 +185,16 @@ assign VGA_F1 = 0;
 assign VGA_SCALER  = 0;
 assign VGA_DISABLE = 0;
 assign HDMI_FREEZE = 0;
+assign VGA_R = '0;
+assign VGA_G = '0;
+assign VGA_B = '0;
+assign CLK_VIDEO = 0;
+assign CE_PIXEL = 0;
+assign VGA_HS = 0;
+assign VGA_VS = 0;
+assign VGA_DE = 0;
+
+assign LED_USER = 0;
 
 assign AUDIO_S = 0;
 assign AUDIO_L = 0;
@@ -207,32 +217,131 @@ localparam CONF_STR = {
 	"CBM-II;;",
 	"-;",
 	"O[122:121],Aspect ratio,Original,Full Screen,[ARC1],[ARC2];",
-	"O[2],TV Mode,NTSC,PAL;",
-	"O[4:3],Noise,White,Red,Green,Blue;",
+	"O[4],TV Mode,NTSC,PAL;",
 	"-;",
-	"P1,Test Page 1;",
-	"P1-;",
-	"P1-, -= Options in page 1 =-;",
-	"P1-;",
-	"P1O[5],Option 1-1,Off,On;",
-	"d0P1F1,BIN;",
-	"H0P1O[10],Option 1-2,Off,On;",
+	"O[1],Model,Professional,Business;",
+	"O[3:2],RAM,128K,256K,1M,16M;",
 	"-;",
-	"P2,Test Page 2;",
-	"P2-;",
-	"P2-, -= Options in page 2 =-;",
-	"P2-;",
-	"P2S0,DSK;",
-	"P2O[7:6],Option 2,1,2,3,4;",
-	"-;",
-	"-;",
-	"T[0],Reset;",
-	"R[0],Reset and close OSD;",
-	"v,0;", // [optional] config version 0-99. 
-	        // If CONF_STR options are changed in incompatible way, then change version number too,
-			  // so all options will get default values on first start.
+	"R[0],Reset;",
+	"v,0;",
 	"V,v",`BUILD_DATE 
 };
+
+wire pll_locked;
+wire clk_sys;  // 32727264 Hz (Prof/PAL), 31527954 Hz (Prof/NTSC), TODO: 32000000 (Business)
+wire clk64;
+wire clk48;
+
+pll pll
+(
+	.refclk(CLK_50M),
+	.outclk_0(clk48),
+	.outclk_1(clk64),
+	.outclk_2(clk_sys),
+	.reconfig_to_pll(reconfig_to_pll),
+	.reconfig_from_pll(reconfig_from_pll),
+	.locked(pll_locked)
+);
+
+wire [63:0] reconfig_to_pll;
+wire [63:0] reconfig_from_pll;
+wire        cfg_waitrequest;
+reg         cfg_write;
+reg   [5:0] cfg_address;
+reg  [31:0] cfg_data;
+
+pll_cfg pll_cfg
+(
+	.mgmt_clk(CLK_50M),
+	.mgmt_reset(0),
+	.mgmt_waitrequest(cfg_waitrequest),
+	.mgmt_read(0),
+	.mgmt_readdata(),
+	.mgmt_write(cfg_write),
+	.mgmt_address(cfg_address),
+	.mgmt_writedata(cfg_data),
+	.reconfig_to_pll(reconfig_to_pll),
+	.reconfig_from_pll(reconfig_from_pll)
+);
+
+always @(posedge CLK_50M) begin
+	reg ntscd = 0, ntscd2 = 0;
+	reg [2:0] state = 0;
+	reg ntsc_r;
+
+	ntscd <= ntsc;
+	ntscd2 <= ntscd;
+
+	cfg_write <= 0;
+	if(ntscd2 == ntscd && ntscd2 != ntsc_r) begin
+		state <= 1;
+		ntsc_r <= ntscd2;
+	end
+
+	if(!cfg_waitrequest) begin
+		if(state) state<=state+1'd1;
+		case(state)
+			1: begin
+					cfg_address <= 0;
+					cfg_data <= 0;
+					cfg_write <= 1;
+				end
+				/*
+			3: begin
+					cfg_address <= 4;
+					cfg_data <= ntsc_r ? 'h20504 : 'h404;
+					cfg_write <= 1;
+				end
+				*/
+			5: begin
+					cfg_address <= 7;
+					cfg_data <= ntsc_r ? 3357876127 : 1503512573;
+					cfg_write <= 1;
+				end
+			7: begin
+					cfg_address <= 2;
+					cfg_data <= 0;
+					cfg_write <= 1;
+				end
+		endcase
+	end
+end
+
+reg reset_n;
+// reg reset_wait = 0;
+always @(posedge clk_sys) begin
+	integer reset_counter;
+	// reg old_download;
+	// reg do_erase = 1;
+
+	reset_n <= !reset_counter;
+	// old_download <= ioctl_download;
+
+	if (RESET | status[0] | buttons[1] | !pll_locked) begin
+		// if(RESET) do_erase <= 1;
+		reset_counter <= 100000;
+	end
+	// else if(~old_download & ioctl_download & load_prg & ~status[50]) begin
+	// 	do_erase <= 1;
+	// 	reset_wait <= 1;
+	// 	reset_counter <= 255;
+	// end
+	// else if (ioctl_download & (load_crt | load_rom)) begin
+	// 	do_erase <= 1;
+	// 	reset_counter <= 255;
+	// end
+	// else if ((ioctl_download || inj_meminit) & ~reset_wait);
+	// else if (erasing) force_erase <= 0;
+	// else if (!reset_counter) begin
+	// 	do_erase <= 0;
+	// 	if(reset_wait && c64_addr == 'hFFCF) reset_wait <= 0;
+	// end
+	// else begin
+	else if (reset_counter) begin
+		reset_counter <= reset_counter - 1;
+		// if (reset_counter == 100 && (~status[24] | do_erase)) force_erase <= 1;
+	end
+end
 
 wire forced_scandoubler;
 wire   [1:0] buttons;
@@ -250,62 +359,113 @@ hps_io #(.CONF_STR(CONF_STR)) hps_io
 
 	.buttons(buttons),
 	.status(status),
-	.status_menumask({status[5]}),
+	// .status_menumask({status[5]}),
 	
 	.ps2_key(ps2_key)
 );
 
 ///////////////////////   CLOCKS   ///////////////////////////////
 
-wire clk_sys;
-pll pll
-(
-	.refclk(CLK_50M),
-	.rst(0),
-	.outclk_0(clk_sys)
-);
+// wire clk_sys;
+// pll pll
+// (
+// 	.refclk(CLK_50M),
+// 	.rst(0),
+// 	.outclk_0(clk_sys)
+// );
 
-wire reset = RESET | status[0] | buttons[1];
+// wire reset = RESET | status[0] | buttons[1];
 
-wire [1:0] col = status[4:3];
+// wire [1:0] col = status[4:3];
 
-wire HBlank;
-wire HSync;
-wire VBlank;
-wire VSync;
-wire ce_pix;
-wire [7:0] video;
+// wire HBlank;
+// wire HSync;
+// wire VBlank;
+// wire VSync;
+// wire ce_pix;
+// wire [7:0] video;
 
-CBM2 CBM2
-(
-	.clk(clk_sys),
-	.reset(reset),
+// CBM2 CBM2
+// (
+// 	.clk(clk_sys),
+// 	.reset(reset),
 	
-	.pal(status[2]),
-	.scandouble(forced_scandoubler),
+// 	.pal(status[2]),
+// 	.scandouble(forced_scandoubler),
 
-	.ce_pix(ce_pix),
+// 	.ce_pix(ce_pix),
 
-	.HBlank(HBlank),
-	.HSync(HSync),
-	.VBlank(VBlank),
-	.VSync(VSync),
+// 	.HBlank(HBlank),
+// 	.HSync(HSync),
+// 	.VBlank(VBlank),
+// 	.VSync(VSync),
 
-	.video(video)
+// 	.video(video)
+// );
+
+// assign CLK_VIDEO = clk_sys;
+// assign CE_PIXEL = ce_pix;
+
+// assign VGA_DE = ~(HBlank | VBlank);
+// assign VGA_HS = HSync;
+// assign VGA_VS = VSync;
+// assign VGA_G  = (!col || col == 2) ? video : 8'd0;
+// assign VGA_R  = (!col || col == 1) ? video : 8'd0;
+// assign VGA_B  = (!col || col == 3) ? video : 8'd0;
+
+// reg  [26:0] act_cnt;
+// always @(posedge clk_sys) act_cnt <= act_cnt + 1'd1; 
+// assign LED_USER    = act_cnt[26]  ? act_cnt[25:18]  > act_cnt[7:0]  : act_cnt[25:18]  <= act_cnt[7:0];
+
+// SDRAM
+
+assign SDRAM_CKE  = 1;
+
+wire [24:0] sdram_addr;
+wire        sdram_ce;
+wire        sdram_we;
+wire [7:0]  sdram_out;
+wire [7:0]  sdram_data;
+wire        refresh;
+
+sdram sdram
+(
+	.sd_addr(SDRAM_A),
+	.sd_data(SDRAM_DQ),
+	.sd_ba(SDRAM_BA),
+	.sd_cs(SDRAM_nCS),
+	.sd_we(SDRAM_nWE),
+	.sd_ras(SDRAM_nRAS),
+	.sd_cas(SDRAM_nCAS),
+	.sd_clk(SDRAM_CLK),
+	.sd_dqm({SDRAM_DQMH,SDRAM_DQML}),
+
+	.clk(clk64),
+	.init(~pll_locked),
+	.refresh(refresh),
+	.addr( sdram_addr ),
+	.ce  ( sdram_ce   ),
+	.we  ( sdram_we   ),
+	.din ( sdram_out  ),  // to sdram
+	.dout( sdram_data )   // from sdram
 );
 
-assign CLK_VIDEO = clk_sys;
-assign CE_PIXEL = ce_pix;
+wire ntsc = status[4];
 
-assign VGA_DE = ~(HBlank | VBlank);
-assign VGA_HS = HSync;
-assign VGA_VS = VSync;
-assign VGA_G  = (!col || col == 2) ? video : 8'd0;
-assign VGA_R  = (!col || col == 1) ? video : 8'd0;
-assign VGA_B  = (!col || col == 3) ? video : 8'd0;
+cbm2_main main (
+	.model(status[1]),
+	.ramSize(status[3:2]),
+	.ntsc(ntsc),
 
-reg  [26:0] act_cnt;
-always @(posedge clk_sys) act_cnt <= act_cnt + 1'd1; 
-assign LED_USER    = act_cnt[26]  ? act_cnt[25:18]  > act_cnt[7:0]  : act_cnt[25:18]  <= act_cnt[7:0];
+	.clk_sys(clk_sys),
+	.reset_n(reset_n),
+
+	.ramAddr(sdram_addr),
+	.ramData(sdram_data),
+	.ramOut(sdram_out),
+	.ramCE(sdram_ce),
+	.ramWE(sdram_we),
+	.refresh(refresh)
+);
 
 endmodule
