@@ -1,21 +1,23 @@
 module cbm2_buslogic (
    input         model,     // 0=Professional, 1=Business
    input [1:0]   ramSize,   // 0=128k, 1=256k, 2=1M, 3=16M
+   input         ipcRamEn,  // Enable IPC RAM (seg 15 $0FFF-$0800)
    
    input         clk_sys,
    input         reset,
 
    input  [15:0] cpuAddr,
-   input  [7:0]  cpuPO,
-   input         cpuWe,
+   input  [7:0]  cpuSeg,
+   // input         cpuWe,
    output [7:0]  cpuDi,
 
-   output [24:0] ramAddr,
+   output [24:0] systemAddr,
+   // output        systemWe,
+
    input  [7:0]  ramData,
-   output        ramWE,
 
    output        cs_ram,
-   output        cs_romcrt,
+   output        cs_romext,
    // output        cs_vidram,
    output        cs_colram,
    output        cs_vic,
@@ -106,7 +108,7 @@ always @(*) begin
    cs_romA <= 0;
    cs_romC <= 0;
    cs_romE <= 0;
-   cs_romcrt <= 0;
+   cs_romext <= 0;
    // cs_vidram <= 0;
    cs_colram <= 0;
    cs_vic <= 0;
@@ -119,24 +121,59 @@ always @(*) begin
    cs_tpi1 <= 0;
    cs_tpi2 <= 0;
 
-   ramAddr[15:0] <= cpuAddr;
-   ramAddr[23:16] <= cpuPO;
-   ramAddr[24] <= 0;
+   systemAddr[15:0] <= cpuAddr;
+   systemAddr[23:16] <= cpuSeg;
+   systemAddr[24] <= 0;
 
-   ramWE <= 0;
+   // systemWe <= 0;
 
-   if (cpuPO == 15) begin  // Bank 15
+   // From KERNAL_CBM2_1983-07-07/declare:
+
+   // CURRENT MEMORY MAP:
+   //   SEGMENT 15- $FFFF-$E000  ROM (KERNAL)
+   //               $DFFF-$DF00  I/O  6525 TPI2
+   //               $DEFF-$DE00  I/O  6525 TPI1
+   //               $DDFF-$DD00  I/O  6551 ACIA
+   //               $DCFF-$DC00  I/O  6526 CIA
+   //               $DBFF-$DB00  I/O  UNUSED (Z80,8088,68008)
+   //               $DAFF-$DA00  I/O  6581 SID
+   //               $D9FF-$D900  I/O  UNUSED (DISKS)
+   //               $D8FF-$D800  I/O  6566 VIC/ 6845 80-COL
+   //               $D7FF-$D400  COLOR NYBLES/80-COL SCREEN
+   //               $D3FF-$D000  VIDEO MATRIX/80-COL SCREEN
+   //               $CFFF-$C000  CHARACTER DOT ROM (P2 ONLY)
+   //               $BFFF-$8000  ROMS EXTERNAL (LANGUAGE)
+   //               $7FFF-$4000  ROMS EXTERNAL (EXTENSIONS)
+   //               $3FFF-$2000  ROM  EXTERNAL
+   //               $1FFF-$1000  ROM  INTERNAL
+   //               $0FFF-$0400  UNUSED
+   //               $03FF-$0002  RAM (KERNAL/BASIC SYSTEM)
+   //   SEGMENT 14- SEGMENT 8 OPEN (FUTURE EXPANSION)
+   //   SEGMENT 7 - $FFFF-$0002  RAM EXPANSION (EXTERNAL)
+   //   SEGMENT 6 - $FFFF-$0002  RAM EXPANSION (EXTERNAL)
+   //   SEGMENT 5 - $FFFF-$0002  RAM EXPANSION (EXTERNAL)
+   //   SEGMENT 4 - $FFFF-$0002  RAM B2 EXPANSION (P2 EXTERNAL)
+   //   SEGMENT 3 - $FFFF-$0002  RAM EXPANSION
+   //   SEGMENT 2 - $FFFF-$0002  RAM B2 STANDARD (P2 OPTINAL)
+   //   SEGMENT 1 - $FFFF-$0002  RAM B2 P2 STANDARD
+   //   SEGMENT 0 - $FFFF-$0002  RAM P2 STANDARD (B2 OPTIONAL)   
+
+   // Note: The same file later on declares additional RAM in segment 15:
+   //               $0FFF-$0800  KERNAL INTER-PROCESS COMMUNICATION VARIABLES
+   //               $07FF-$0400  RAMLOC
+
+   if (cpuSeg == 15) begin  // Segment 15
       case(cpuAddr[15:12])
-         4'h0: begin // buffer RAM
-                  ramWE  <= cpuWe;   
+         4'h0: if (~cpuAddr[11] || ipcRamEn) begin
+                  // systemWe  <= cpuWe;
                   cs_ram <= 1;
                end
          4'h1: begin // Disk ROM
                   cs_rom1 <= 1;
                end
-         4'h2, 4'h3, 4'h4, 4'h5, 4'h6, 4'h7:  // Cartpidge port ROM
+         4'h2, 4'h3, 4'h4, 4'h5, 4'h6, 4'h7:  // External ROM
                begin
-                  cs_romcrt <= 1;
+                  cs_romext <= 1;
                end
          4'h8, 4'h9: begin // BASIC ROM lo
                   cs_rom8 <= 1;
@@ -144,17 +181,16 @@ always @(*) begin
          4'hA, 4'hB: begin // BASIC ROM hi
                   cs_romA <= 1;
                end
-         4'hC: if (model == 0) begin // Character ROM (P model only)
+         4'hC: if (model == 0) begin // Character ROM (P2 only)
                   cs_romC <= 1;
                end
          4'hD: case(cpuAddr[11:8]) // I/O
-                  4'h0, 4'h1, 4'h2, 4'h3: // Video RAM
-                        cs_ram <= 1;
+                  4'h0, 4'h1, 4'h2, 4'h3: cs_ram  <= 1;  // Video RAM
                   4'h4, 4'h5, 4'h6, 4'h7:
-                        if (model == 0) cs_colram <= 1;
-                        else            cs_ram    <= 1;
-                  4'h8: if (model == 0) cs_vic    <= 1;
-                        else            cs_crtc   <= 1;
+                        if (model == 0) cs_colram <= 1;  // Color RAM (P2)
+                        else            cs_ram    <= 1;  // Video RAM (B2)
+                  4'h8: if (model == 0) cs_vic    <= 1;  // VIC (P2)
+                        else            cs_crtc   <= 1;  // CRTC (B2)
                   4'h9: cs_disk <= 1;  // Disk
                   4'hA: cs_sid <= 1;   // SID
                   4'hB: cs_cop <= 1;   // Coprocessor
@@ -169,13 +205,13 @@ always @(*) begin
          default: ;
       endcase
    end 
-   else begin  // Other banks
-      ramWE <= cpuWe;
+   else begin  // Other segments
+      // systemWe <= cpuWe;
       
       case (ramSize)
-         0      : cs_ram <= model == 0 ? (cpuPO<=1) : (cpuPO>=1 && cpuPO<=2);   // 128k
-         1      : cs_ram <= model == 0 ? (cpuPO<=3) : (cpuPO>=1 && cpuPO<=4);   // 256k
-         default: cs_ram <= ~model || ~|cpuPO;                                  // all banks
+         0      : cs_ram <= model == 0 ? (cpuSeg<=1) : (cpuSeg>=1 && cpuSeg<=2);   // 128k (Standard)
+         1      : cs_ram <= model == 0 ? (cpuSeg<=3) : (cpuSeg>=1 && cpuSeg<=4);   // 256k (Standard+Expansion)
+         default: cs_ram <= 1;                                                     // all segments
       endcase
    end
 end

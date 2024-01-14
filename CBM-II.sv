@@ -177,7 +177,6 @@ assign ADC_BUS  = 'Z;
 assign USER_OUT = '1;
 assign {UART_RTS, UART_TXD, UART_DTR} = 0;
 assign {SD_SCK, SD_MOSI, SD_CS} = 'Z;
-// assign {SDRAM_DQ, SDRAM_A, SDRAM_BA, SDRAM_CLK, SDRAM_CKE, SDRAM_DQML, SDRAM_DQMH, SDRAM_nWE, SDRAM_nCAS, SDRAM_nRAS, SDRAM_nCS} = 'Z;
 assign {DDRAM_CLK, DDRAM_BURSTCNT, DDRAM_ADDR, DDRAM_DIN, DDRAM_BE, DDRAM_RD, DDRAM_WE} = '0;  
 
 assign VGA_SL = 0;
@@ -417,16 +416,14 @@ hps_io #(.CONF_STR(CONF_STR)) hps_io
 // always @(posedge clk_sys) act_cnt <= act_cnt + 1'd1; 
 // assign LED_USER    = act_cnt[26]  ? act_cnt[25:18]  > act_cnt[7:0]  : act_cnt[25:18]  <= act_cnt[7:0];
 
+// ========================================================================
 // SDRAM
+// ========================================================================
 
 assign SDRAM_CKE  = 1;
 
-wire [24:0] sdram_addr;
-wire        sdram_ce;
-wire        sdram_we;
-wire [7:0]  sdram_out;
 wire [7:0]  sdram_data;
-wire        refresh;
+wire        io_cycle;
 
 sdram sdram
 (
@@ -443,14 +440,25 @@ sdram sdram
 	.clk(clk64),
 	.init(~pll_locked),
 	.refresh(refresh),
-	.addr( sdram_addr ),
-	.ce  ( sdram_ce   ),
-	.we  ( sdram_we   ),
-	.din ( sdram_out  ),  // to sdram
-	.dout( sdram_data )   // from sdram
+	.addr(io_cycle ? 0 : cpu_addr),
+	.ce  (io_cycle ? 0 : cpu_ce),
+	.we  (io_cycle ? 0 : cpu_we),
+	.din (io_cycle ? 0 : cpu_out),
+	.dout(sdram_data)
 );
 
 wire ntsc = status[4];
+
+// ========================================================================
+// CBM-II Main
+// ========================================================================
+
+wire [24:0] cpu_addr;
+wire        cpu_ce;
+wire        cpu_we;
+wire [7:0]  cpu_out;
+
+wire        refresh;
 
 cbm2_main main (
 	.model(status[1]),
@@ -460,12 +468,14 @@ cbm2_main main (
 	.clk_sys(clk_sys),
 	.reset_n(reset_n),
 
-	.ramAddr(sdram_addr),
+	.ramAddr(cpu_addr),
 	.ramData(sdram_data),
-	.ramOut(sdram_out),
-	.ramCE(sdram_ce),
-	.ramWE(sdram_we),
-	.refresh(refresh)
+	.ramOut(cpu_out),
+	.ramCE(cpu_ce),
+	.ramWE(cpu_we),
+	.refresh(refresh),
+
+	.io_cycle(io_cycle)
 );
 
 endmodule

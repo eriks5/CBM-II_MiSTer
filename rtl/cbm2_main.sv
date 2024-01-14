@@ -26,16 +26,17 @@ sysCycle_t sysCycle, preCycle;
 reg [1:0]  rfsh_cycle = 0;
 reg        reset = 0;
 
-assign ramCE = cs_ram && cpu_cycle;
-
 assign io_cycle = (sysCycle >= CYCLE_EXT0 && sysCycle <= CYCLE_EXT3)
                || (sysCycle >= CYCLE_EXT4 && sysCycle <= CYCLE_EXT7 && rfsh_cycle != 0)
                || (sysCycle >= CYCLE_EXT8 && sysCycle <= CYCLE_EXT11);
 
-wire vic_cycle = (sysCycle >= CYCLE_VID0 && sysCycle <= CYCLE_VID3)
+wire vid_cycle = (sysCycle >= CYCLE_VID0 && sysCycle <= CYCLE_VID3)
               || (sysCycle >= CYCLE_CPU12 && sysCycle <= CYCLE_CPU15);
 
 wire cpu_cycle = sysCycle >= CYCLE_CPU0 && sysCycle <= CYCLE_CPU15;
+
+assign ramWE = cpuWe && cpu_cycle;
+assign ramCE = cs_ram && ((!model && sysCycle == CYCLE_VID0) || sysCycle == CYCLE_CPU0);
 
 always @(posedge clk_sys) begin
    sysCycle <= sysCycle.next();
@@ -300,13 +301,14 @@ cbm2_buslogic buslogic (
    .reset(reset),
 
    .cpuAddr(cpuAddr),
+   .cpuSeg(cpuPO),
    .cpuDi(cpuDi),
-   .cpuPO(cpuPO),
-   .cpuWe(cpuWe),
+   // .cpuWe(cpuWe),
 
-   .ramAddr(ramAddr),
+   .systemAddr(ramAddr),
+   // .systemWe(systemWe),
+
    .ramData(ramData),
-   .ramWE(ramWE),
 
    .cs_ram(cs_ram),
    .cs_colram(cs_colram),
