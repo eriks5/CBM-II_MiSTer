@@ -216,7 +216,7 @@ localparam CONF_STR = {
 	"CBM-II;;",
 	"-;",
 	"O[122:121],Aspect ratio,Original,Full Screen,[ARC1],[ARC2];",
-	"O[4],TV Mode,NTSC,PAL;",
+	"O[4],TV System,PAL,NTSC;",
 	"-;",
 	"O[1],Model,Professional,Business;",
 	"O[3:2],RAM,128K,256K,1M,16M;",

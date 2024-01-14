@@ -38,6 +38,9 @@ wire cpu_cycle = sysCycle >= CYCLE_CPU0 && sysCycle <= CYCLE_CPU15;
 assign ramWE = cpuWe && cpu_cycle;
 assign ramCE = cs_ram && ((!model && sysCycle == CYCLE_VID0) || sysCycle == CYCLE_CPU0);
 
+assign ramAddr = {1'b0, systemAddr};
+assign ramOut = cpuDo;
+
 always @(posedge clk_sys) begin
    sysCycle <= sysCycle.next();
 
@@ -52,7 +55,7 @@ always @(posedge clk_sys) begin
    end
 end
 
-wire enableCpu  = sysCycle == CYCLE_CPU2;
+wire enableCpu  = sysCycle == CYCLE_CPU3 || (model && sysCycle == CYCLE_CPU11);
 wire enableVic  = sysCycle == CYCLE_VID3 || sysCycle == CYCLE_CPU15;
 wire enableIO_p = sysCycle == CYCLE_CPU13;
 wire enableIO_n = sysCycle == CYCLE_CPU15.next();
@@ -65,6 +68,21 @@ always @(posedge clk_sys) begin
    end
 end
 
+reg phi0_cpu;
+reg cpuHasBus;
+
+always @(posedge clk_sys) begin
+   if (sysCycle == CYCLE_CPU0.prev()) begin
+      phi0_cpu <= 1'b1;
+      cpuHasBus <= baLoc || cpuWe;
+   end
+   if (sysCycle == CYCLE_CPU15) begin
+      phi0_cpu <= 1'b0;
+      cpuHasBus <= 1'b0;
+   end
+end
+
+reg [23:0] systemAddr;
 
 reg [15:0] cpuAddr;
 reg [7:0]  cpuPO;
@@ -72,33 +90,16 @@ reg        cpuWe;
 reg [7:0]  cpuDi;
 reg [7:0]  cpuDo;
 
-reg        cs_ram;
-// reg        cs_vidram;
-reg        cs_colram;
-reg        cs_vic;
-reg        cs_crtc;
-reg        cs_disk;
-reg        cs_sid;
-reg        cs_cop;
-reg        cs_cia;
-reg        cs_acia;
-reg        cs_tpi1;
-reg        cs_tpi2;
-
 // reg [7:0]  vidData;
-reg [3:0]  colData;
-reg [7:0]  vicData;
 reg [7:0]  crtcData;
 reg [7:0]  diskData;
-reg [7:0]  sidData;
 reg [7:0]  copData;
-reg [7:0]  ciaData;
-reg [7:0]  aciaData;
-reg [7:0]  tpi1Data;
-reg [7:0]  tpi2Data;
 
-always @(*)
-   ramOut <= cpuDo;
+// ============================================================================
+// CPU
+// ============================================================================
+
+wire irq_n = irq_tpi1 & irq_vic;
 
 cpu_6509 cpu (
    .widePO(&ramSize),
@@ -119,21 +120,80 @@ cpu_6509 cpu (
    .pout(cpuPO)
 );
 
+// ============================================================================
+// VIC-II
+// ============================================================================
+
+reg        baLoc;
+reg        aec;
+reg        irq_vic;
+
+reg [7:0]  vicBus;
+reg [7:0]  vicData;
+reg [3:0]  colData;
+reg [13:0] vicAddr;
+
+always @(posedge clk_sys) begin
+   if (phi0_cpu) begin
+      vicBus <= (cpuWe && cs_vic) ? cpuDo : 8'hFF;
+   end
+end
+
+wire       enableVicPixel = sysCycle[1:0] == 2'b01;
+wire [7:0] vicDiAec = aec ? cpuDi : vicBus;
+wire [3:0] colorDataAec = aec ? colData : cpuDi[3:0];
+
 spram #(4,10) colorram (
    .clk(clk_sys),
    .we(cs_colram && pulseWr_io),
-   .addr(cpuAddr[9:0]),
+   .addr(systemAddr[9:0]),
    .data(cpuDo[3:0]),
    .q(colData)
 );
 
-// spram #(8,11) videoram (
-//    .clk(clk_sys),
-//    .we(cs_vidram && pulseWr_io),
-//    .addr(cpuAddr[10:0]),
-//    .data(cpuDo),
-//    .q(vidData)
-// );
+video_vicii_656x #(
+   .registeredAddress("true"),
+   .emulateRefresh("true"),
+   .emulateLightpen("true"),
+   .emulateGraphics("true")
+) vicII (
+   .clk(clk_sys),
+   .reset(reset),
+   .enaPixel(enableVicPixel),
+   .enaData(enableVic),
+   .phi(phi0_cpu),
+
+   .baSync(0),
+   .ba(baLoc),
+
+   .mode6569(~ntsc),
+   .mode6567old(0),
+   .mode6567R8(ntsc),
+   .mode6572(0),
+   .variant(2'b00),
+
+   .turbo_en(0),
+
+   .cs(cs_vic),
+   .we(cpuWe),
+   .lp_n(0),
+
+   .aRegisters(cpuAddr[5:0]),
+   .diRegisters(cpuDo),
+   .di(vicDiAec),
+   .diColor(colorDataAec),
+   .DO(vicData),
+
+   .vicAddr(vicAddr),
+   .addrValid(aec),
+   .irq_n(irq_vic)
+);
+
+// ============================================================================
+// SID
+// ============================================================================
+
+reg [7:0]  sidData;
 
 sid_top sid (
    .reset(reset),
@@ -145,6 +205,10 @@ sid_top sid (
    .data_in(cpuDo),
    .data_out(sidData)
 );
+
+// ============================================================================
+// CIA
+// ============================================================================
 
 reg todclk;
 
@@ -187,7 +251,8 @@ always @(posedge clk_sys) begin
    end
 end
 
-wire irq_cia;
+wire       irq_cia;
+reg [7:0]  ciaData;
 
 mos6526 cia (
    .mode(0),
@@ -207,7 +272,12 @@ mos6526 cia (
    .irq_n(irq_cia)
 );
 
-wire irq_acia;
+// ============================================================================
+// ACIA (UART)
+// ============================================================================
+
+wire       irq_acia;
+reg [7:0]  aciaData;
 
 glb6551 acia (
    .CLK(clk_sys),
@@ -226,6 +296,7 @@ glb6551 acia (
 // TPI 1 -- Interupt handling and IEEE-488 control signals
 // ============================================================================
 
+reg [7:0]  tpi1Data;
 wire [7:0] tpi1_pao;
 wire [7:0] tpi1_pbo;
 wire [7:0] tpi1_pco;
@@ -250,9 +321,9 @@ wire       nrfd_o = tpi1_pao[7];
 wire       dirctl = tpi1_pao[0];
 wire       talken = tpi1_pao[1];
 
-wire       irq_n   = tpi1_pco[5];
-wire       tpi1_ca = tpi1_pco[6];
-wire       tpi1_cb = tpi1_pco[7];
+wire       irq_tpi1  = tpi1_pco[5];
+wire       statvid   = tpi1_pco[6];
+wire       vicdotsel = tpi1_pco[7];
 
 mos_tpi tpi1 (
    .mode(1),
@@ -280,6 +351,14 @@ mos_tpi tpi1 (
 // TPI 2 -- Keyboard
 // ============================================================================
 
+reg [7:0]  tpi2Data;
+
+wire [7:0] tpi2_pao;
+wire [7:0] tpi2_pbo;
+wire [7:0] tpi2_pco;
+
+wire [1:0] vicbanksel = tpi2_pbo[7:6];
+
 mos_tpi tpi2 (
    .mode(1),
 
@@ -290,8 +369,33 @@ mos_tpi tpi2 (
 
    .rs(cpuAddr[2:0]),
    .db_in(cpuDo),
-   .db_out(tpi2Data)
+   .db_out(tpi2Data),
+
+   .pa_in(8'b11111111),
+   .pa_out(tpi2_pao),
+
+   .pb_in(8'b11111111),
+   .pb_out(tpi2_pbo),
+
+   .pc_in(8'b11111111),
+   .pc_out(tpi2_pco)
 );
+
+// ============================================================================
+// PLA, ROM and glue logic
+// ============================================================================
+
+reg        cs_ram;
+reg        cs_colram;
+reg        cs_vic;
+reg        cs_crtc;
+reg        cs_disk;
+reg        cs_sid;
+reg        cs_cop;
+reg        cs_cia;
+reg        cs_acia;
+reg        cs_tpi1;
+reg        cs_tpi2;
 
 cbm2_buslogic buslogic (
    .model(model),
@@ -300,13 +404,19 @@ cbm2_buslogic buslogic (
    .clk_sys(clk_sys),
    .reset(reset),
 
+   .cpuHasBus(cpuHasBus),
+
    .cpuAddr(cpuAddr),
    .cpuSeg(cpuPO),
    .cpuDi(cpuDi),
-   // .cpuWe(cpuWe),
 
-   .systemAddr(ramAddr),
-   // .systemWe(systemWe),
+   .vicAddr(vicAddr),
+   .vicdotsel(vicdotsel),
+   .statvid(statvid),
+   .vicbanksel(vicbanksel),
+   .phi0(phi0_cpu),
+
+   .systemAddr(systemAddr),
 
    .ramData(ramData),
 

@@ -6,12 +6,20 @@ module cbm2_buslogic (
    input         clk_sys,
    input         reset,
 
+   input         cpuHasBus,
+
    input  [15:0] cpuAddr,
    input  [7:0]  cpuSeg,
    // input         cpuWe,
    output [7:0]  cpuDi,
 
-   output [24:0] systemAddr,
+   input  [13:0] vicAddr,
+   input         vicdotsel,
+   input         statvid,
+   input  [1:0]  vicbanksel,
+   input         phi0,
+
+   output [23:0] systemAddr,
    // output        systemWe,
 
    input  [7:0]  ramData,
@@ -58,7 +66,7 @@ rom_mem #(8,13,"rtl/roms/PL/b500-8000.901243-01.mif") rom_basic_lo_p
    .wren_a(rom_wr),
 
    .clock_b(clk_sys),
-   .address_b(cpuAddr),
+   .address_b(systemAddr),
    .q_b(rom8Data)
 );
 
@@ -71,7 +79,7 @@ rom_mem #(8,13,"rtl/roms/PL/b500-a000.901242-01a.mif") rom_basic_hi_p
    .wren_a(rom_wr),
 
    .clock_b(clk_sys),
-   .address_b(cpuAddr),
+   .address_b(systemAddr),
    .q_b(romAData)
 );
 
@@ -84,7 +92,7 @@ rom_mem #(8,12,"rtl/roms/PL/characters.901225-01.mif") rom_char_p
    .wren_a(rom_wr),
 
    .clock_b(clk_sys),
-   .address_b(cpuAddr),
+   .address_b(systemAddr),
    .q_b(romCData)
 );
 
@@ -97,7 +105,7 @@ rom_mem #(8,13,"rtl/roms/PL/kernal.901234-02.mif") rom_kernal_p
    .wren_a(rom_wr),
 
    .clock_b(clk_sys),
-   .address_b(cpuAddr),
+   .address_b(systemAddr),
    .q_b(romEData)
 );
 
@@ -121,11 +129,7 @@ always @(*) begin
    cs_tpi1 <= 0;
    cs_tpi2 <= 0;
 
-   systemAddr[15:0] <= cpuAddr;
-   systemAddr[23:16] <= cpuSeg;
-   systemAddr[24] <= 0;
-
-   // systemWe <= 0;
+   systemAddr <= 24'h0;
 
    // From KERNAL_CBM2_1983-07-07/declare:
 
@@ -135,7 +139,7 @@ always @(*) begin
    //               $DEFF-$DE00  I/O  6525 TPI1
    //               $DDFF-$DD00  I/O  6551 ACIA
    //               $DCFF-$DC00  I/O  6526 CIA
-   //               $DBFF-$DB00  I/O  UNUSED (Z80,8088,68008)
+   //               $DBFF-$DB00  I/O  UNUSED (Z80,8088,68008) [6526 IPCIA]
    //               $DAFF-$DA00  I/O  6581 SID
    //               $D9FF-$D900  I/O  UNUSED (DISKS)
    //               $D8FF-$D800  I/O  6566 VIC/ 6845 80-COL
@@ -162,57 +166,74 @@ always @(*) begin
    //               $0FFF-$0800  KERNAL INTER-PROCESS COMMUNICATION VARIABLES
    //               $07FF-$0400  RAMLOC
 
-   if (cpuSeg == 15) begin  // Segment 15
-      case(cpuAddr[15:12])
-         4'h0: if (~cpuAddr[11] || ipcRamEn) begin
-                  // systemWe  <= cpuWe;
-                  cs_ram <= 1;
-               end
-         4'h1: begin // Disk ROM
-                  cs_rom1 <= 1;
-               end
-         4'h2, 4'h3, 4'h4, 4'h5, 4'h6, 4'h7:  // External ROM
-               begin
-                  cs_romext <= 1;
-               end
-         4'h8, 4'h9: begin // BASIC ROM lo
-                  cs_rom8 <= 1;
-               end
-         4'hA, 4'hB: begin // BASIC ROM hi
-                  cs_romA <= 1;
-               end
-         4'hC: if (model == 0) begin // Character ROM (P2 only)
-                  cs_romC <= 1;
-               end
-         4'hD: case(cpuAddr[11:8]) // I/O
-                  4'h0, 4'h1, 4'h2, 4'h3: cs_ram  <= 1;  // Video RAM
-                  4'h4, 4'h5, 4'h6, 4'h7:
-                        if (model == 0) cs_colram <= 1;  // Color RAM (P2)
-                        else            cs_ram    <= 1;  // Video RAM (B2)
-                  4'h8: if (model == 0) cs_vic    <= 1;  // VIC (P2)
-                        else            cs_crtc   <= 1;  // CRTC (B2)
-                  4'h9: cs_disk <= 1;  // Disk
-                  4'hA: cs_sid <= 1;   // SID
-                  4'hB: cs_cop <= 1;   // Coprocessor
-                  4'hC: cs_cia <= 1;   // CIA
-                  4'hD: cs_acia <= 1;  // ACIA
-                  4'hE: cs_tpi1 <= 1;  // tpi-port 1
-                  4'hF: cs_tpi2 <= 1;  // tpi-port 2
-               endcase
-         4'hE, 4'hF: begin // Kernal ROM
-                  cs_romE <= 1;
-               end
-         default: ;
-      endcase
+   if (cpuHasBus) begin
+      systemAddr <= {cpuSeg, cpuAddr};
+
+      if (cpuSeg == 15) // Segment 15
+         case(cpuAddr[15:12])
+            4'h0: if (~cpuAddr[11] || ipcRamEn) begin
+                     // systemWe  <= cpuWe;
+                     cs_ram <= 1;
+                  end
+            4'h1: begin // Disk ROM
+                     cs_rom1 <= 1;
+                  end
+            4'h2, 4'h3, 4'h4, 4'h5, 4'h6, 4'h7:  // External ROM
+                  begin
+                     cs_romext <= 1;
+                  end
+            4'h8, 4'h9: begin // BASIC ROM lo
+                     cs_rom8 <= 1;
+                  end
+            4'hA, 4'hB: begin // BASIC ROM hi
+                     cs_romA <= 1;
+                  end
+            4'hC: if (model == 0) begin // Character ROM (P2 only)
+                     cs_romC <= 1;
+                  end
+            4'hD: case(cpuAddr[11:8]) // I/O
+                     4'h0, 4'h1, 4'h2, 4'h3: cs_ram  <= 1;  // Video RAM
+                     4'h4, 4'h5, 4'h6, 4'h7:
+                           if (model == 0) cs_colram <= 1;  // Color RAM (P2)
+                           else            cs_ram    <= 1;  // Video RAM (B2)
+                     4'h8: if (model == 0) cs_vic    <= 1;  // VIC (P2)
+                           else            cs_crtc   <= 1;  // CRTC (B2)
+                     4'h9: cs_disk <= 1;  // Disk
+                     4'hA: cs_sid <= 1;   // SID
+                     4'hB: cs_cop <= 1;   // Coprocessor
+                     4'hC: cs_cia <= 1;   // CIA
+                     4'hD: cs_acia <= 1;  // ACIA
+                     4'hE: cs_tpi1 <= 1;  // tpi-port 1
+                     4'hF: cs_tpi2 <= 1;  // tpi-port 2
+                  endcase
+            4'hE, 4'hF: begin // Kernal ROM
+                     cs_romE <= 1;
+                  end
+            default: ;
+         endcase
+      else 
+         case (ramSize)
+            0      : cs_ram <= model == 0 ? (cpuSeg<=1) : (cpuSeg>=1 && cpuSeg<=2);   // 128k (Standard)
+            1      : cs_ram <= model == 0 ? (cpuSeg<=3) : (cpuSeg>=1 && cpuSeg<=4);   // 256k (Standard+Expansion)
+            default: cs_ram <= 1;                                                     // all segments
+         endcase
    end 
-   else begin  // Other segments
-      // systemWe <= cpuWe;
-      
-      case (ramSize)
-         0      : cs_ram <= model == 0 ? (cpuSeg<=1) : (cpuSeg>=1 && cpuSeg<=2);   // 128k (Standard)
-         1      : cs_ram <= model == 0 ? (cpuSeg<=3) : (cpuSeg>=1 && cpuSeg<=4);   // 256k (Standard+Expansion)
-         default: cs_ram <= 1;                                                     // all segments
-      endcase
+   else if (!model) begin
+      if (vicdotsel && !phi0) begin
+         // Seg 15, $CFFF-$C000 (Character ROM)
+         systemAddr <= {12'h0FC, vicAddr[11:0]};
+         cs_romC <= 1;
+      end
+      else if (statvid) begin
+         // Seg 15, $D3FF-$D000 (Video RAM)
+         systemAddr <= {12'h0FD, 2'b00, vicAddr[9:0]};
+         cs_ram <= 1;
+      end
+      else begin
+         // Seg 0
+         systemAddr <= {8'h00, ~vicbanksel, vicAddr};
+         cs_ram <= 1;
+      end
    end
 end
 
