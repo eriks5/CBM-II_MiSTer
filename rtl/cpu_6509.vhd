@@ -39,13 +39,13 @@ architecture rtl of cpu_6509 is
 	signal localDi : std_logic_vector(7 downto 0);
 	signal localDo : std_logic_vector(7 downto 0);
 	signal localWe : std_logic;
-	signal VDA : std_logic;
-	signal VPA : std_logic;
 	signal DEBUG : T_t65_dbg;
 
 	signal exeReg : std_logic_vector(7 downto 0);
 	signal indReg : std_logic_vector(7 downto 0);
-
+	
+	signal indCount : unsigned(1 downto 0);
+	signal indirect : std_logic;
 	signal localAccess : std_logic;
 begin
 
@@ -65,8 +65,6 @@ begin
 		DI      => localDi,
 		DO      => localDo,
 		NMI_ack => nmi_ack,
-		VDA     => VDA,
-		VPA     => VPA,
 		DEBUG   => DEBUG
 	);
 
@@ -84,7 +82,7 @@ begin
 				end if;
 			end if;
 
-			if reset = '1' then
+			if reset = '1' and enable = '1' then
 				exeReg <= (others => '1');
 				indReg <= (others => '1');
 			end if;
@@ -96,8 +94,23 @@ begin
 		end if;
 	end process;
 
+	process(clk)
+	begin
+		if rising_edge(clk) then
+			if (enable = '1' and rdy = '1') then
+				if reset = '0' and irq_n = '1' and nmi_n = '1' and (DEBUG.I = X"91" or DEBUG.I = X"B1") then
+					indCount <= indCount + 1;
+				else
+					indCount <= (others => '0');
+				end if;
+			end if;
+		end if;
+	end process;
+
+	indirect <= '1' when indCount = 3 else '0';
+
 	addr <= unsigned(localA(15 downto 0));
 	dout <= unsigned(localDo) when localAccess = '0' or widePO = '1' else unsigned("0000" & localDo(3 downto 0));
+	pout <= unsigned(indReg) when indirect = '1' else unsigned(exeReg);
 	we <= not localWe;
-	pout <= unsigned(exeReg) when VDA = '0' or VPA = '1' or (DEBUG.I /= X"91" and DEBUG.I /= X"B1") else unsigned(indReg);
 end architecture;
