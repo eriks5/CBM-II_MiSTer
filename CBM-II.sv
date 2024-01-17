@@ -171,29 +171,11 @@ module emu
 	input         OSD_STATUS
 );
 
-///////// Default values for ports not used in this core /////////
-
 assign ADC_BUS  = 'Z;
 assign USER_OUT = '1;
 assign {UART_RTS, UART_TXD, UART_DTR} = 0;
+assign {DDRAM_CLK, DDRAM_BURSTCNT, DDRAM_ADDR, DDRAM_DIN, DDRAM_BE, DDRAM_RD, DDRAM_WE} = '0;
 assign {SD_SCK, SD_MOSI, SD_CS} = 'Z;
-assign {DDRAM_CLK, DDRAM_BURSTCNT, DDRAM_ADDR, DDRAM_DIN, DDRAM_BE, DDRAM_RD, DDRAM_WE} = '0;  
-
-assign VGA_SL = 0;
-assign VGA_F1 = 0;
-assign VGA_SCALER  = 0;
-assign VGA_DISABLE = 0;
-assign HDMI_FREEZE = 0;
-assign VGA_R = '0;
-assign VGA_G = '0;
-assign VGA_B = '0;
-assign CLK_VIDEO = 0;
-assign CE_PIXEL = 0;
-assign VGA_HS = 0;
-assign VGA_VS = 0;
-assign VGA_DE = 0;
-
-assign LED_USER = 0;
 
 assign AUDIO_S = 0;
 assign AUDIO_L = 0;
@@ -202,32 +184,43 @@ assign AUDIO_MIX = 0;
 
 assign LED_DISK = 0;
 assign LED_POWER = 0;
+assign LED_USER = 0;
 assign BUTTONS = 0;
+assign VGA_DISABLE = 0;
+assign VGA_SCALER = 0;
 
 //////////////////////////////////////////////////////////////////
 
-wire [1:0] ar = status[122:121];
+// Status Bit Map:
+//              Upper                          Lower
+// 0         1         2         3          4         5         6
+// 01234567890123456789012345678901 23456789012345678901234567890123
+// 0123456789ABCDEFGHIJKLMNOPQRSTUV 0123456789ABCDEFGHIJKLMNOPQRSTUV
+// XXXXXXXXXXXXXXX
 
-assign VIDEO_ARX = (!ar) ? 12'd4 : (ar - 1'd1);
-assign VIDEO_ARY = (!ar) ? 12'd3 : 12'd0;
-
-`include "build_id.v" 
+`include "build_id.v"
 localparam CONF_STR = {
 	"CBM-II;;",
 	"-;",
-	"O[122:121],Aspect ratio,Original,Full Screen,[ARC1],[ARC2];",
-	"O[4],TV System,PAL,NTSC;",
-	"-;",
 	"O[1],Model,Professional,Business;",
+	"D0O[5],CPU Clock,1 MHz,2 MHz;",
+	"O[4],TV System,PAL,NTSC;",
 	"O[3:2],RAM,128K,256K,1M,16M;",
 	"-;",
-	"R[0],Reset;",
+	"O[7:6],Aspect Ratio,Original,Full Screen,[ARC1],[ARC2];",
+	"O[10:8],Scandoubler Fx,None,HQ2x-320,HQ2x-160,CRT 25%,CRT 50%,CRT 75%;",
+	"d1O[11],Vertical Crop,No,Yes;",
+	"O[13:12],Scale,Normal,V-Integer,Narrower HV-Integer,Wider HV-Integer;",
+	"-;",
+	"O[14],Pause When OSD is Open,No,Yes;",
+	"-;"
+,	"R[0],Reset;",
 	"v,0;",
-	"V,v",`BUILD_DATE 
+	"V,v",`BUILD_DATE
 };
 
 wire pll_locked;
-wire clk_sys;  // 32727264 Hz (Prof/PAL), 31527954 Hz (Prof/NTSC), TODO: 32000000 (Business)
+wire clk_sys;
 wire clk64;
 wire clk48;
 
@@ -263,20 +256,31 @@ pll_cfg pll_cfg
 	.reconfig_from_pll(reconfig_from_pll)
 );
 
+wire [31:0] CLK = model ? 32_000_000
+                : ntsc  ? 32_727_266
+                :         31_527_954;
+
 always @(posedge CLK_50M) begin
 	reg ntscd = 0, ntscd2 = 0;
+	reg modeld = 0, modeld2 = 0;
 	reg [2:0] state = 0;
-	reg ntsc_r;
+	reg ntsc_r, model_r;
 
 	ntscd <= ntsc;
 	ntscd2 <= ntscd;
-
-	cfg_write <= 0;
 	if(ntscd2 == ntscd && ntscd2 != ntsc_r) begin
-		state <= 1;
+		if (!model_r) state <= 1;
 		ntsc_r <= ntscd2;
 	end
 
+	modeld <= model;
+	modeld2 <= modeld;
+	if(modeld2 == modeld && modeld2 != model_r) begin
+		state <= 1;
+		model_r <= modeld2;
+	end
+
+	cfg_write <= 0;
 	if(!cfg_waitrequest) begin
 		if(state) state<=state+1'd1;
 		case(state)
@@ -294,7 +298,7 @@ always @(posedge CLK_50M) begin
 				*/
 			5: begin
 					cfg_address <= 7;
-					cfg_data <= ntsc_r ? 3357876127 : 1503512573;
+					cfg_data <= model_r ? 2233385555 : (ntsc_r ? 3357876127 : 1503512573);
 					cfg_write <= 1;
 				end
 			7: begin
@@ -310,13 +314,16 @@ reg reset_n;
 // reg reset_wait = 0;
 always @(posedge clk_sys) begin
 	integer reset_counter;
+	reg model_r;
 	// reg old_download;
 	// reg do_erase = 1;
+
+	model_r <= model;
 
 	reset_n <= !reset_counter;
 	// old_download <= ioctl_download;
 
-	if (RESET | status[0] | buttons[1] | !pll_locked) begin
+	if (RESET || status[0] || buttons[1] || (model^model_r) || !pll_locked) begin
 		// if(RESET) do_erase <= 1;
 		reset_counter <= 100000;
 	end
@@ -342,24 +349,24 @@ always @(posedge clk_sys) begin
 	end
 end
 
-wire forced_scandoubler;
+wire         forced_scandoubler;
 wire   [1:0] buttons;
 wire [127:0] status;
 wire  [10:0] ps2_key;
+wire  [21:0] gamma_bus;
 
 hps_io #(.CONF_STR(CONF_STR)) hps_io
 (
 	.clk_sys(clk_sys),
 	.HPS_BUS(HPS_BUS),
 	.EXT_BUS(),
-	.gamma_bus(),
 
-	.forced_scandoubler(forced_scandoubler),
-
-	.buttons(buttons),
 	.status(status),
-	// .status_menumask({status[5]}),
-	
+	.status_menumask({ |vcrop, status[1] }),
+	.buttons(buttons),
+	.forced_scandoubler(forced_scandoubler),
+	.gamma_bus(gamma_bus),
+
 	.ps2_key(ps2_key)
 );
 
@@ -388,7 +395,7 @@ hps_io #(.CONF_STR(CONF_STR)) hps_io
 // (
 // 	.clk(clk_sys),
 // 	.reset(reset),
-	
+
 // 	.pal(status[2]),
 // 	.scandouble(forced_scandoubler),
 
@@ -413,8 +420,11 @@ hps_io #(.CONF_STR(CONF_STR)) hps_io
 // assign VGA_B  = (!col || col == 3) ? video : 8'd0;
 
 // reg  [26:0] act_cnt;
-// always @(posedge clk_sys) act_cnt <= act_cnt + 1'd1; 
+// always @(posedge clk_sys) act_cnt <= act_cnt + 1'd1;
 // assign LED_USER    = act_cnt[26]  ? act_cnt[25:18]  > act_cnt[7:0]  : act_cnt[25:18]  <= act_cnt[7:0];
+
+wire model = status[1];
+wire ntsc = status[4];
 
 // ========================================================================
 // SDRAM
@@ -423,7 +433,7 @@ hps_io #(.CONF_STR(CONF_STR)) hps_io
 assign SDRAM_CKE  = 1;
 
 wire [7:0]  sdram_data;
-wire        io_cycle;
+wire        ext_cycle;
 
 sdram sdram
 (
@@ -440,14 +450,12 @@ sdram sdram
 	.clk(clk64),
 	.init(~pll_locked),
 	.refresh(refresh),
-	.addr(io_cycle ? 0 : cpu_addr),
-	.ce  (io_cycle ? 0 : cpu_ce),
-	.we  (io_cycle ? 0 : cpu_we),
-	.din (io_cycle ? 0 : cpu_out),
+	.addr(ext_cycle ? 0 : cpu_addr),
+	.ce  (ext_cycle ? 0 : cpu_ce),
+	.we  (ext_cycle ? 0 : cpu_we),
+	.din (ext_cycle ? 0 : cpu_out),
 	.dout(sdram_data)
 );
-
-wire ntsc = status[4];
 
 // ========================================================================
 // CBM-II Main
@@ -458,12 +466,22 @@ wire        cpu_ce;
 wire        cpu_we;
 wire [7:0]  cpu_out;
 
+wire        pause;
+
 wire        refresh;
+wire [7:0]  r, g, b;
+wire        hsync, vsync;
 
 cbm2_main main (
-	.model(status[1]),
-	.ramSize(status[3:2]),
+	.CLK(CLK),
+
+	.model(model),
 	.ntsc(ntsc),
+	.turbo(status[5]),
+	.ramSize(status[3:2]),
+
+	.pause(freeze),
+	.pause_out(pause),
 
 	.clk_sys(clk_sys),
 	.reset_n(reset_n),
@@ -475,7 +493,137 @@ cbm2_main main (
 	.ramWE(cpu_we),
 	.refresh(refresh),
 
-	.io_cycle(io_cycle)
+	.ext_cycle(ext_cycle),
+
+	.hsync(hsync),
+	.vsync(vsync),
+	.r(r),
+	.g(g),
+	.b(b)
+);
+
+// ========================================================================
+// Video
+// ========================================================================
+
+wire hblank;
+wire vblank;
+wire hsync_out;
+wire vsync_out;
+
+video_sync sync
+(
+	.clk32(clk_sys),
+	.pause(pause),
+	.hsync(hsync),
+	.vsync(vsync),
+	.ntsc(ntsc),
+	.wide(wide),
+	.hsync_out(hsync_out),
+	.vsync_out(vsync_out),
+	.hblank(hblank),
+	.vblank(vblank)
+);
+
+reg hq2x160;
+always @(posedge clk_sys) begin
+	reg old_vsync;
+
+	old_vsync <= vsync_out;
+	if (!old_vsync && vsync_out) begin
+		hq2x160 <= (status[10:8] == 2);
+	end
+end
+
+reg ce_pix;
+always @(posedge CLK_VIDEO) begin
+	reg [2:0] div;
+	reg       lores;
+
+	div <= div + 1'b1;
+	if(&div) lores <= ~lores;
+	ce_pix <= (~lores | ~hq2x160) && !div;
+end
+
+wire scandoubler = status[10:8] || forced_scandoubler;
+
+assign CLK_VIDEO = clk64;
+assign VGA_SL    = (status[10:8] > 2) ? status[9:8] - 2'd2 : 2'd0;
+assign VGA_F1    = 0;
+
+reg [9:0] vcrop;
+reg wide;
+always @(posedge CLK_VIDEO) begin
+	vcrop <= 0;
+	wide <= 0;
+	if(HDMI_WIDTH >= (HDMI_HEIGHT + HDMI_HEIGHT[11:1]) && !scandoubler) begin
+		if(HDMI_HEIGHT == 480)  vcrop <= 240;
+		if(HDMI_HEIGHT == 600)  begin vcrop <= 200; wide <= vcrop_en; end
+		if(HDMI_HEIGHT == 720)  vcrop <= 240;
+		if(HDMI_HEIGHT == 768)  vcrop <= 256; // NTSC mode has 250 visible lines only!
+		if(HDMI_HEIGHT == 800)  begin vcrop <= 200; wide <= vcrop_en; end
+		if(HDMI_HEIGHT == 1080) vcrop <= 10'd216;
+		if(HDMI_HEIGHT == 1200) vcrop <= 240;
+	end
+	else if(HDMI_WIDTH >= 1440 && !scandoubler) begin
+		// 1920x1440 and 2048x1536 are 4:3 resolutions and won't fit in the previous if statement ( width > height * 1.5 )
+		if(HDMI_HEIGHT == 1440) vcrop <= 240;
+		if(HDMI_HEIGHT == 1536) vcrop <= 256;
+	end
+end
+
+wire [1:0] ar = status[7:6];
+wire vcrop_en = status[11];
+wire vga_de;
+video_freak video_freak
+(
+	.*,
+	.VGA_DE_IN(vga_de),
+	.ARX((!ar) ? (wide ? 12'd340 : 12'd400) : (ar - 1'd1)),
+	.ARY((!ar) ? 12'd300 : 12'd0),
+	.CROP_SIZE(vcrop_en ? vcrop : 10'd0),
+	.CROP_OFF(0),
+	.SCALE(status[13:12])
+);
+
+wire freeze_sync;
+reg freeze;
+always @(posedge clk_sys) begin
+	reg old_sync;
+
+	old_sync <= freeze_sync;
+	if(old_sync ^ freeze_sync) freeze <= OSD_STATUS & status[14];
+end
+
+assign HDMI_FREEZE = freeze;
+
+video_mixer #(.GAMMA(1)) video_mixer
+(
+	.CLK_VIDEO(CLK_VIDEO),
+
+	.hq2x(~status[10] & (status[9] ^ status[8])),
+	.scandoubler(scandoubler),
+	.gamma_bus(gamma_bus),
+
+	.ce_pix(ce_pix),
+	.R(r),
+	.G(g),
+	.B(b),
+	.HSync(hsync_out),
+	.VSync(vsync_out),
+	.HBlank(hblank),
+	.VBlank(vblank),
+
+	.HDMI_FREEZE(HDMI_FREEZE),
+	.freeze_sync(freeze_sync),
+
+	.CE_PIXEL(CE_PIXEL),
+	.VGA_R(VGA_R),
+	.VGA_G(VGA_G),
+	.VGA_B(VGA_B),
+	.VGA_VS(VGA_VS),
+	.VGA_HS(VGA_HS),
+	.VGA_DE(vga_de)
 );
 
 endmodule
