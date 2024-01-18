@@ -29,12 +29,12 @@ module cbm2_main (
 
 typedef enum bit[4:0] {
 	CYCLE_EXT0, CYCLE_EXT1, CYCLE_EXT2, CYCLE_EXT3,
-   CYCLE_EXT4, CYCLE_EXT5, CYCLE_EXT6, CYCLE_EXT7,
    CYCLE_CPU0, CYCLE_CPU1, CYCLE_CPU2, CYCLE_CPU3,
+   CYCLE_COP0, CYCLE_COP1, CYCLE_COP2, CYCLE_COP3,
    CYCLE_VID0, CYCLE_VID1, CYCLE_VID2, CYCLE_VID3,
-   CYCLE_EXT8, CYCLE_EXT9, CYCLE_EXTA, CYCLE_EXTB,
-   CYCLE_EXTC, CYCLE_EXTD, CYCLE_EXTE, CYCLE_EXTF,
+   CYCLE_EXT4, CYCLE_EXT5, CYCLE_EXT6, CYCLE_EXT7,
    CYCLE_CPU4, CYCLE_CPU5, CYCLE_CPU6, CYCLE_CPU7,
+   CYCLE_COP4, CYCLE_COP5, CYCLE_COP6, CYCLE_COP7,
    CYCLE_VID4, CYCLE_VID5, CYCLE_VID6, CYCLE_VID7
 } sysCycle_t;
 
@@ -47,9 +47,7 @@ wire       sys2MHz = model | (turbo & ~(cs_vic | cs_sid));
 
 // External cycle
 assign ext_cycle = (sysCycle >= CYCLE_EXT0 && sysCycle <= CYCLE_EXT3)
-                || (sysCycle >= CYCLE_EXT4 && sysCycle <= CYCLE_EXT7 && rfsh_cycle != 0)
-                || (sysCycle >= CYCLE_EXT8 && sysCycle <= CYCLE_EXTB)
-                || (sysCycle >= CYCLE_EXTC && sysCycle <= CYCLE_EXTF);
+                || (sysCycle >= CYCLE_EXT4 && sysCycle <= CYCLE_EXT7 && rfsh_cycle != 0);
 
 // Video cycle (VIC or CRTC)
 wire vid_cycle = (sysCycle >= CYCLE_VID0 && sysCycle <= CYCLE_VID3)
@@ -59,15 +57,14 @@ wire vid_cycle = (sysCycle >= CYCLE_VID0 && sysCycle <= CYCLE_VID3)
 wire cpu_cycle = (sysCycle >= CYCLE_CPU0 && sysCycle <= CYCLE_CPU3 && sys2MHz)
               || (sysCycle >= CYCLE_CPU4 && sysCycle <= CYCLE_CPU7);
 
-// wire enableVid  = vid_cycle && sysCycle[1:0] == 3;
-// wire enableIO_n = cpu_cycle && sysCycle[1:0] == 2;
-// wire enableCpu  = cpu_cycle && sysCycle[1:0] == 3;
-// wire pulseWr_io = cpu_cycle && sysCycle[1:0] == 3 && cpuWe;
-// wire enableIO_p = ext_cycle && sysCycle[1:0] == 0 && (!sysCycle[4] || sys2MHz);
+// CoCPU cycle
+wire cop_cycle = (sysCycle >= CYCLE_COP0 && sysCycle <= CYCLE_COP3 && sys2MHz)
+              || (sysCycle >= CYCLE_COP4 && sysCycle <= CYCLE_COP7);
 
 wire enableVid  = sysCycle == CYCLE_VID7        ||  sysCycle == CYCLE_VID3;
 wire enableIO_n = sysCycle == CYCLE_CPU6        || (sysCycle == CYCLE_CPU2 && sys2MHz);
 wire enableCpu  = sysCycle == CYCLE_CPU7        || (sysCycle == CYCLE_CPU3 && sys2MHz);
+// wire enableCop  = sysCycle == CYCLE_COP7        || (sysCycle == CYCLE_COP3 && sys2MHz);
 wire pulseWr_io = enableCpu && cpuWe;
 wire enableIO_p = sysCycle == CYCLE_CPU7.next() || (sysCycle == CYCLE_CPU3.next() && sys2MHz);
 
@@ -77,8 +74,10 @@ wire phase      = sysCycle[4];
 
 assign ramWE = cpuWe && cpu_cycle;
 assign ramCE = cs_ram && ((sysCycle == CYCLE_CPU0 && sys2MHz)
+                        //  || (sysCycle == CYCLE_COP0 && sys2MHz)
                          || sysCycle == CYCLE_VID0
                          || sysCycle == CYCLE_CPU4
+                        //  || sysCycle == CYCLE_COP4
                          || sysCycle == CYCLE_VID4
                          );
 
@@ -149,22 +148,24 @@ reg        baLoc;
 reg        aec;
 reg        irq_vic;
 
-reg [7:0]  vicBus;
-reg [7:0]  vicData;
-reg [3:0]  colData;
+// reg [7:0]  vicBus;
 reg [15:0] vicAddr;
+reg [3:0]  colData;
+reg [7:0]  vicDi;
+
+reg [7:0]  vicData;
 reg [3:0]  vicColorIndex;
 
 assign vicAddr[15:14] = ~tpi2_pbo[7:6];
 
-always @(posedge clk_sys) begin
-   if (phase) begin
-      vicBus <= (cpuWe && cs_vic) ? cpuDo : 8'hFF;
-   end
-end
+// always @(posedge clk_sys) begin
+//    if (phase) begin
+//       vicBus <= (cpuWe && cs_vic) ? cpuDo : 8'hFF;
+//    end
+// end
 
-wire [7:0] vicDiAec = aec ? cpuDi : vicBus;
-wire [3:0] colorDataAec = aec ? colData : cpuDi[3:0];
+// wire [7:0] vicDiAec = aec ? vidDi : vicBus;
+// wire [3:0] colorDataAec = aec ? colData : vidDi[3:0];
 
 spram #(4,10) colorram (
    .clk(clk_sys),
@@ -203,8 +204,8 @@ video_vicii_656x #(
 
    .aRegisters(cpuAddr[5:0]),
    .diRegisters(cpuDo),
-   .di(vicDiAec),
-   .diColor(colorDataAec),
+   .di(vicDi),
+   .diColor(colData),
    .DO(vicData),
 
    .vicAddr(vicAddr[13:0]),
@@ -419,12 +420,14 @@ cbm2_buslogic buslogic (
    .clk_sys(clk_sys),
    .reset(reset),
 
-   .cpuHasBus(),
+   .cpuCycle(cpu_cycle || cop_cycle),
    .cpuAddr(cpuAddr),
    .cpuSeg(cpuPO),
    .cpuDi(cpuDi),
 
+   .vidCycle(vid_cycle),
    .vidAddr(vicAddr),
+   .vidDi(vicDi),
 
    .vicdotsel(vicdotsel),
    .statvid(statvid),

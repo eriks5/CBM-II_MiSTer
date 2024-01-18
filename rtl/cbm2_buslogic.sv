@@ -6,12 +6,14 @@ module cbm2_buslogic (
    input         clk_sys,
    input         reset,
 
-   input         cpuHasBus,
+   input         cpuCycle,
    input  [15:0] cpuAddr,
    input  [7:0]  cpuSeg,
    output [7:0]  cpuDi,
 
+   input         vidCycle,
    input  [15:0] vidAddr,
+   output [7:0]  vidDi,
 
    input         vicdotsel,
    input         statvid,
@@ -178,7 +180,8 @@ always @(*) begin
    cs_romC <= 0;
    cs_romE <= 0;
 
-   if (cpuHasBus) begin
+   // CPU or CoCPU
+   if (cpuCycle) begin
       systemAddr <= {cpuSeg, cpuAddr};
 
       if (cpuSeg == 15) // Segment 15
@@ -203,7 +206,9 @@ always @(*) begin
             default: cs_ram <= 1;                                                     // all segments
          endcase
    end
-   else if (!model) begin
+
+   // VIC
+   if (vidCycle && !model) begin
       if (vicdotsel && !vicPhase) begin
          // Seg 15, $CFFF-$C000 (Character ROM)
          systemAddr <= {12'h0FC, vidAddr[11:0]};
@@ -223,16 +228,20 @@ always @(*) begin
 end
 
 reg [7:0] lastCpuDi;
+reg [7:0] lastVidDi;
 
 always @(posedge clk_sys) begin
-   if (cpuHasBus)
+   if (cpuCycle)
       lastCpuDi <= cpuDi;
+   if (vidCycle)
+      lastVidDi <= vidDi;
 end
 
 always @(*) begin
    cpuDi <= lastCpuDi;
+   vidDi <= lastVidDi;
 
-   if (cpuHasBus)
+   if (cpuCycle)
       if (cs_ram) begin
          cpuDi <= ramData;
       end
@@ -248,9 +257,6 @@ always @(*) begin
       else if (cs_romE) begin
          cpuDi <= romEData;
       end
-      // else if (cs_vidram) begin
-      //    cpuDi <= vidData;
-      // end
       else if (cs_colram) begin
          cpuDi[3:0] <= colData;
       end
@@ -274,6 +280,14 @@ always @(*) begin
       end
       else if (cs_tpi2) begin
          cpuDi <= tpi2Data;
+      end
+
+   if (vidCycle)
+      if (cs_ram) begin
+         vidDi <= ramData;
+      end
+      else if (cs_romC) begin
+         vidDi <= romCData;
       end
 end
 
