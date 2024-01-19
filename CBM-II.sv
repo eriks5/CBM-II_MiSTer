@@ -196,17 +196,18 @@ assign VGA_SCALER = 0;
 // 0         1         2         3          4         5         6
 // 01234567890123456789012345678901 23456789012345678901234567890123
 // 0123456789ABCDEFGHIJKLMNOPQRSTUV 0123456789ABCDEFGHIJKLMNOPQRSTUV
-// XXXXXXXXXXXXXXX
+// XXXXXXXXXXXXXXXXX
 
 `include "build_id.v"
 localparam CONF_STR = {
 	"CBM-II;;",
 	"-;",
 	"O[1],Model,Professional,Business;",
-	"D0O[5],CPU Clock,1 MHz,2 MHz;",
-	"O[4],TV System,PAL,NTSC;",
+	"h0O[16:15],Co-processor,None,Z80,8088;",
+	"H0O[5],CPU Clock,1 MHz,2 MHz;",
 	"O[3:2],RAM,128K,256K,1M,16M;",
 	"-;",
+	"O[4],TV System,PAL,NTSC;",
 	"O[7:6],Aspect Ratio,Original,Full Screen,[ARC1],[ARC2];",
 	"O[10:8],Scandoubler Fx,None,HQ2x-320,HQ2x-160,CRT 25%,CRT 50%,CRT 75%;",
 	"d1O[11],Vertical Crop,No,Yes;",
@@ -313,17 +314,21 @@ end
 reg reset_n;
 // reg reset_wait = 0;
 always @(posedge clk_sys) begin
-	integer reset_counter;
-	reg model_r;
+	integer   reset_counter;
+	reg       model_r;
+	reg [1:0] copro_r;
+	reg [1:0] ramsize_r;
 	// reg old_download;
 	// reg do_erase = 1;
 
 	model_r <= model;
+	copro_r <= copro;
+	ramsize_r <= ramsize;
 
 	reset_n <= !reset_counter;
 	// old_download <= ioctl_download;
 
-	if (RESET || status[0] || buttons[1] || (model^model_r) || !pll_locked) begin
+	if (RESET || status[0] || buttons[1] || (model != model_r) || (copro != copro_r) || (ramsize != ramsize_r) || !pll_locked) begin
 		// if(RESET) do_erase <= 1;
 		reset_counter <= 100000;
 	end
@@ -424,6 +429,8 @@ hps_io #(.CONF_STR(CONF_STR)) hps_io
 // assign LED_USER    = act_cnt[26]  ? act_cnt[25:18]  > act_cnt[7:0]  : act_cnt[25:18]  <= act_cnt[7:0];
 
 wire model = status[1];
+wire copro = status[16:15];
+wire ramsize = status[3:2];
 wire ntsc = status[4];
 
 // ========================================================================
@@ -478,7 +485,8 @@ cbm2_main main (
 	.model(model),
 	.ntsc(ntsc),
 	.turbo(status[5]),
-	.ramSize(status[3:2]),
+	.ramSize(ramsize),
+	.copro(copro),
 
 	.pause(freeze),
 	.pause_out(pause),

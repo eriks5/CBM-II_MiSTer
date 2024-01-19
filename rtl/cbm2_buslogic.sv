@@ -1,7 +1,7 @@
 module cbm2_buslogic (
    input         model,     // 0=Professional, 1=Business
    input [1:0]   ramSize,   // 0=128k, 1=256k, 2=1M, 3=16M
-   input         ipcRamEn,  // Enable IPC RAM (seg 15 $0FFF-$0800)
+   input         ipcEn,     // Enable IPC RAM (seg 15 $0FFF-$0800)
 
    input         clk_sys,
    input         reset,
@@ -34,7 +34,6 @@ module cbm2_buslogic (
    output        cs_tpi1,
    output        cs_tpi2,
 
-   // input  [7:0]  vidData,
    input  [3:0]  colData,
    input  [7:0]  vicData,
    input  [7:0]  crtcData,
@@ -159,7 +158,7 @@ always @(*) begin
          4'h8: if (!model) cs_vic    <= 1; // VIC (P2)
                else        cs_crtc   <= 1; // CRTC (B2)
          4'hA:             cs_sid    <= 1; // SID
-         4'hB:             cs_ipcia  <= 1; // IPCIA
+         4'hB: if (ipcEn)  cs_ipcia  <= 1; // IPCIA
          4'hC:             cs_cia    <= 1; // CIA
          4'hD:             cs_acia   <= 1; // ACIA
          4'hE:             cs_tpi1   <= 1; // tpi-port 1
@@ -186,17 +185,17 @@ always @(*) begin
 
       if (cpuSeg == 15) // Segment 15
          case(cpuAddr[15:12])
-            4'h0: if (~cpuAddr[11] || ipcRamEn) cs_ram    <= 1; // Buffer ram
-            4'h8, 4'h9:                         cs_rom8   <= 1; // BASIC ROM lo
-            4'hA, 4'hB:                         cs_romA   <= 1; // BASIC ROM hi
-            4'hC:                               cs_romC   <= 1; // Character ROM (P2 only)
+            4'h0: if (~cpuAddr[11] || ipcEn)    cs_ram  <= 1; // Buffer ram
+            4'h8, 4'h9:                         cs_rom8 <= 1; // BASIC ROM lo
+            4'hA, 4'hB:                         cs_romA <= 1; // BASIC ROM hi
+            4'hC:                               cs_romC <= 1; // Character ROM (P2 only)
             4'hD: case(cpuAddr[11:8])
-                     4'h0, 4'h1, 4'h2, 4'h3:    cs_ram    <= 1; // Video RAM
+                     4'h0, 4'h1, 4'h2, 4'h3:    cs_ram  <= 1; // Video RAM
                      4'h4, 4'h5, 4'h6, 4'h7:
-                                    if (!model) cs_ram    <= 1; // Video RAM (B2)
+                                    if (!model) cs_ram  <= 1; // Video RAM (B2)
                      default:                   ;
                   endcase
-            4'hE, 4'hF:                         cs_romE   <= 1; // Kernal
+            4'hE, 4'hF:                         cs_romE <= 1; // Kernal
             default: ;
          endcase
       else

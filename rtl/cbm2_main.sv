@@ -3,6 +3,7 @@ module cbm2_main (
    input         ntsc,      // 0=PAL, 1=NTSC
    input         turbo,     // 1=2MHz CPU clock (Professional only)
    input  [1:0]  ramSize,   // 0=128k, 2=256k, 2=1M, 3=16M
+   input  [1:0]  copro,     // 0=none, 1=Z80, 2=8088 (Business only)
 
    input         pause,
    output        pause_out,
@@ -44,6 +45,7 @@ reg        reset = 0;
 reg        sysEnable;
 
 wire       sys2MHz = model | (turbo & ~(cs_vic | cs_sid));
+wire       ipcEn = model & ~|copro;
 
 // External cycle
 assign ext_cycle = (sysCycle >= CYCLE_EXT0 && sysCycle <= CYCLE_EXT3)
@@ -64,7 +66,7 @@ wire cop_cycle = (sysCycle >= CYCLE_COP0 && sysCycle <= CYCLE_COP3 && sys2MHz)
 wire enableVid  = sysCycle == CYCLE_VID7        ||  sysCycle == CYCLE_VID3;
 wire enableIO_n = sysCycle == CYCLE_CPU6        || (sysCycle == CYCLE_CPU2 && sys2MHz);
 wire enableCpu  = sysCycle == CYCLE_CPU7        || (sysCycle == CYCLE_CPU3 && sys2MHz);
-// wire enableCop  = sysCycle == CYCLE_COP7        || (sysCycle == CYCLE_COP3 && sys2MHz);
+wire enableCop  = (sysCycle == CYCLE_COP7       || sysCycle == CYCLE_COP3) && ipcEn;
 wire pulseWr_io = enableCpu && cpuWe;
 wire enableIO_p = sysCycle == CYCLE_CPU7.next() || (sysCycle == CYCLE_CPU3.next() && sys2MHz);
 
@@ -74,10 +76,10 @@ wire phase      = sysCycle[4];
 
 assign ramWE = cpuWe && cpu_cycle;
 assign ramCE = cs_ram && ((sysCycle == CYCLE_CPU0 && sys2MHz)
-                        //  || (sysCycle == CYCLE_COP0 && sys2MHz)
+                         || (sysCycle == CYCLE_COP0 && ipcEn)
                          || sysCycle == CYCLE_VID0
                          || sysCycle == CYCLE_CPU4
-                        //  || sysCycle == CYCLE_COP4
+                         || (sysCycle == CYCLE_COP4 && ipcEn)
                          || sysCycle == CYCLE_VID4
                          );
 
@@ -111,9 +113,6 @@ reg [7:0]  cpuPO;
 reg        cpuWe;
 reg [7:0]  cpuDi;
 reg [7:0]  cpuDo;
-
-wire [7:0]  crtcData = 0;
-wire [7:0]  ipciaData = 0;
 
 // ============================================================================
 // CPU
@@ -224,7 +223,6 @@ fpga64_rgbcolor vic_colors (
    .b(b)
 );
 
-
 // ============================================================================
 // SID
 // ============================================================================
@@ -243,7 +241,67 @@ sid_top sid (
 );
 
 // ============================================================================
-// CIA
+// 6526 CIA FOR INTER-PROCESS COMMUNICATION
+//
+//    PRA  = DATA PORT
+//    PRB0 = BUSY1 (1=>6509 OFF DBUS)
+//    PRB1 = BUSY2 (1=>8088/Z80 OFF DBUS)
+//    PRB2 = SEMAPHORE 8088/Z80
+//    PRB3 = SEMAPHORE 6509
+//    PRB4 = UNUSED
+//    PRB5 = UNUSED
+//    PRB6 = IRQ TO 8088/Z80 (LO)
+//    PRB7 = UNUSED
+// ============================================================================
+
+wire       irq_ipcia;
+reg [7:0]  ipciaData;
+
+mos6526 ipcia (
+   .mode(0),
+
+   .clk(clk_sys),
+   .phi2_p(enableIO_p),
+   .phi2_n(enableIO_n),
+   .res_n(~reset & ipcEn),
+   .cs_n(~cs_ipcia),
+   .rw(~cpuWe),
+
+   .rs(cpuAddr[3:0]),
+   .db_in(cpuDo),
+   .db_out(ipciaData),
+
+   .irq_n(irq_ipcia)
+);
+
+// ============================================================================
+// 6526 CIA  COMPLEX INTERFACE ADAPTER -- GAME / IEEE DATA / USER
+//
+//   TIMER A: IEEE LOCAL / CASS LOCAL / MUSIC / GAME
+//   TIMER B: IEEE DEADM / CASS DEADM / MUSIC / GAME
+//
+//   PRA0 : IEEE DATA1 / USER / PADDLE GAME 1
+//   PRA1 : IEEE DATA2 / USER / PADDLE GAME 2
+//   PRA2 : IEEE DATA3 / USER
+//   PRA3 : IEEE DATA4 / USER
+//   PRA4 : IEEE DATA5 / USER
+//   PRA5 : IEEE DATA6 / USER
+//   PRA6 : IEEE DATA7 / USER / GAME TRIGGER 14
+//   PRA7 : IEEE DATA8 / USER / GAME TRIGGER 24
+//
+//   PRB0 : USER / GAME 10
+//   PRB1 : USER / GAME 11
+//   PRB2 : USER / GAME 12
+//   PRB3 : USER / GAME 13
+//   PRB4 : USER / GAME 20
+//   PRB5 : USER / GAME 21
+//   PRB6 : USER / GAME 22
+//   PRB7 : USER / GAME 23
+//
+//   FLAG : USER / CASSETTE READ
+//   PC   : USER
+//   CT   : USER
+//   SP   : USER
 // ============================================================================
 
 reg todclk;
@@ -312,7 +370,34 @@ glb6551 acia (
 );
 
 // ============================================================================
-// TPI 1 -- IRQ control and IEEE-488 control signals
+// 6525 TPI1  TRIPORT INTERFACE DEVICE #1 --  IEEE CONTROL / CASSETTE / NETWORK / VIC / IRQ
+//
+//   PA0 : IEEE DC CONTROL (TI PARTS)
+//   PA1 : IEEE TE CONTROL (TI PARTS) (T/R)
+//   PA2 : IEEE REN
+//   PA3 : IEEE ATN
+//   PA4 : IEEE DAV
+//   PA5 : IEEE EOI
+//   PA6 : IEEE NDAC
+//   PA7 : IEEE NRFD
+//
+//   PB0 : IEEE IFC
+//   PB1 : IEEE SRQ
+//   PB2 : NETWORK TRANSMITTER ENABLE
+//   PB3 : NETWORK RECEIVER ENABLE
+//   PB4 : ARBITRATION LOGIC SWITCH
+//   PB5 : CASSETTE WRITE
+//   PB6 : CASSETTE MOTOR
+//   PB7 : CASSETTE SWITCH
+//
+//   IRQ0: 50/60 HZ IRQ
+//   IRQ1: IEEE SRQ
+//   IRQ2: 6526 IRQ
+//   IRQ3: (OPT) 6526 INTER-PROCESSOR
+//   IRQ4: 6551
+//   *IRQ: 6566 (VIC) / USER DEVICES
+//   CB  : VIC DOT SELECT
+//   CA  : VIC MATRIX SELECT
 // ============================================================================
 
 reg [7:0]  tpi1Data;
@@ -362,12 +447,39 @@ mos_tpi tpi1 (
    .pb_in({6'b111111, srq_i, ifc_i}),
    .pb_out(tpi1_pbo),
 
-   .pc_in({3'b111, irq_acia, 1'b1, irq_cia, srq_i & srq_o, todclk}),
+   .pc_in({3'b111, irq_acia, irq_ipcia, irq_cia, srq_i & srq_o, todclk}),
    .pc_out(tpi1_pco)
 );
 
 // ============================================================================
-// TPI 2 -- Keyboard
+// 6525 TPI2 TIRPORT INTERFACE DEVICE #2 -- KEYBOARD / VIC 16K CONTROL
+//
+//   PA0 : KYBD OUT 8
+//   PA1 : KYBD OUT 9
+//   PA2 : KYBD OUT 10
+//   PA3 : KYBD OUT 11
+//   PA4 : KYBD OUT 12
+//   PA5 : KYBD OUT 13
+//   PA6 : KYBD OUT 14
+//   PA7 : KYBD OUT 15
+//
+//   PB0 : KYBD OUT 0
+//   PB1 : KYBD OUT 1
+//   PB2 : KYBD OUT 2
+//   PB3 : KYBD OUT 3
+//   PB4 : KYBD OUT 4
+//   PB5 : KYBD OUT 5
+//   PB6 : KYBD OUT 6
+//   PB7 : KYBD OUT 7
+//
+//   PC0 : KYBD IN 0
+//   PC1 : KYBD IN 1
+//   PC2 : KYBD IN 2
+//   PC3 : KYBD IN 3
+//   PC4 : KYBD IN 4
+//   PC5 : KYBD IN 5
+//   PC6 : VIC 16K BANK SELECT LOW
+//   PC7 : VIC 16K BANK SELECT HI
 // ============================================================================
 
 reg [7:0]  tpi2Data;
@@ -416,6 +528,7 @@ reg        cs_tpi2;
 cbm2_buslogic buslogic (
    .model(model),
    .ramSize(ramSize),
+   .ipcEn(ipcEn),
 
    .clk_sys(clk_sys),
    .reset(reset),
@@ -450,7 +563,7 @@ cbm2_buslogic buslogic (
 
    .colData(colData),
    .vicData(vicData),
-   .crtcData(crtcData),
+   // .crtcData(crtcData),
    .sidData(sidData),
    .ipciaData(ipciaData),
    .ciaData(ciaData),
