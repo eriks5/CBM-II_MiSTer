@@ -33,14 +33,13 @@ typedef enum bit[4:0] {
    CYCLE_CPU0, CYCLE_CPU1, CYCLE_CPU2, CYCLE_CPU3,
    CYCLE_COP0, CYCLE_COP1, CYCLE_COP2, CYCLE_COP3,
    CYCLE_VID0, CYCLE_VID1, CYCLE_VID2, CYCLE_VID3,
-   CYCLE_EXT4, CYCLE_EXT5, CYCLE_EXT6, CYCLE_EXT7,
-   CYCLE_CPU4, CYCLE_CPU5, CYCLE_CPU6, CYCLE_CPU7,
-   CYCLE_COP4, CYCLE_COP5, CYCLE_COP6, CYCLE_COP7,
-   CYCLE_VID4, CYCLE_VID5, CYCLE_VID6, CYCLE_VID7
+   CYCLE_NOP0, CYCLE_NOP1
 } sysCycle_t;
 
+sysCycle_t PHASE_START = sysCycle_t.first();
+wire [5:0] PHASE_END   = model ? sysCycle_t.last() : CYCLE_VID3;
+
 sysCycle_t sysCycle, preCycle;
-reg [1:0]  rfsh_cycle = 0;
 reg        reset = 0;
 reg        sysEnable;
 
@@ -48,61 +47,65 @@ wire       sys2MHz = model | (turbo & ~(cs_vic | cs_sid));
 wire       ipcEn = model & ~|copro;
 
 // External cycle
-assign ext_cycle = (sysCycle >= CYCLE_EXT0 && sysCycle <= CYCLE_EXT3)
-                || (sysCycle >= CYCLE_EXT4 && sysCycle <= CYCLE_EXT7 && rfsh_cycle != 0);
+assign ext_cycle = sysCycle >= CYCLE_EXT0 && sysCycle <= CYCLE_EXT3 && (!phase || rfsh_cycle != 0);
 
 // Video cycle (VIC or CRTC)
-wire vid_cycle = (sysCycle >= CYCLE_VID0 && sysCycle <= CYCLE_VID3)
-              || (sysCycle >= CYCLE_VID4 && sysCycle <= CYCLE_VID7);
+wire vid_cycle  = sysCycle >= CYCLE_VID0 && sysCycle <= CYCLE_VID3;
 
 // CPU cycle
-wire cpu_cycle = (sysCycle >= CYCLE_CPU0 && sysCycle <= CYCLE_CPU3 && sys2MHz)
-              || (sysCycle >= CYCLE_CPU4 && sysCycle <= CYCLE_CPU7);
+wire cpu_cycle  = sysCycle >= CYCLE_CPU0 && sysCycle <= CYCLE_CPU3 && (phase || sys2MHz);
 
 // CoCPU cycle
-wire cop_cycle = (sysCycle >= CYCLE_COP0 && sysCycle <= CYCLE_COP3 && sys2MHz)
-              || (sysCycle >= CYCLE_COP4 && sysCycle <= CYCLE_COP7);
+wire cop_cycle  = sysCycle >= CYCLE_COP0 && sysCycle <= CYCLE_COP3 && (phase || sys2MHz);
 
-wire enableVid  = sysCycle == CYCLE_VID7        ||  sysCycle == CYCLE_VID3;
-wire enableIO_n = sysCycle == CYCLE_CPU6        || (sysCycle == CYCLE_CPU2 && sys2MHz);
-wire enableCpu  = sysCycle == CYCLE_CPU7        || (sysCycle == CYCLE_CPU3 && sys2MHz);
-wire enableCop  = (sysCycle == CYCLE_COP7       || sysCycle == CYCLE_COP3) && ipcEn;
+wire enableVid  = sysCycle == CYCLE_VID3;
+wire enableIO_n = sysCycle == CYCLE_CPU2        && (phase || sys2MHz);
+wire enableIO_p = sysCycle == CYCLE_CPU3.next() && (phase || sys2MHz);
+wire enableCpu  = sysCycle == CYCLE_CPU3        && (phase || sys2MHz);
+wire enableCop  = sysCycle == CYCLE_COP3        && ipcEn;
 wire pulseWr_io = enableCpu && cpuWe;
-wire enableIO_p = sysCycle == CYCLE_CPU7.next() || (sysCycle == CYCLE_CPU3.next() && sys2MHz);
-
-wire crtcPixel  = sysCycle[0];
-wire vicPixel   = &sysCycle[1:0];
-wire phase      = sysCycle[4];
 
 assign ramWE = cpuWe && cpu_cycle;
-assign ramCE = cs_ram && ((sysCycle == CYCLE_CPU0 && sys2MHz)
-                         || (sysCycle == CYCLE_COP0 && ipcEn)
-                         || sysCycle == CYCLE_VID0
-                         || sysCycle == CYCLE_CPU4
-                         || (sysCycle == CYCLE_COP4 && ipcEn)
-                         || sysCycle == CYCLE_VID4
-                         );
+assign ramCE = cs_ram && ( (sysCycle == CYCLE_CPU0 && (phase || sys2MHz))
+                        || (sysCycle == CYCLE_COP0 && ipcEn)
+                        ||  sysCycle == CYCLE_VID0
+                        );
 
 assign ramAddr = {1'b0, systemAddr};
 assign ramOut = cpuDo;
 
-assign sysCycle = sysEnable ? preCycle : CYCLE_EXT4;
+assign sysCycle = sysEnable ? preCycle : CYCLE_EXT0;
 assign pause_out = ~sysEnable;
 
+reg [2:0] rfsh_cycle = 0;
+reg       phase;
+
 always @(posedge clk_sys) begin
-   preCycle <=preCycle.next();
-   if (preCycle == sysCycle_t.last()) begin
-      // preCycle <= sysCycle_t.first();
-      if (sysEnable)
-         rfsh_cycle <= rfsh_cycle + 1'b1;
+   preCycle <= preCycle.next();
+   refresh <= 0;
+
+   if (preCycle == PHASE_END) begin
+      preCycle <= PHASE_START;
+      phase <= ~phase;
+      rfsh_cycle <= rfsh_cycle + 1'b1;
+
+      if (rfsh_cycle == 0) begin
+         sysEnable <= ~pause;
+         refresh <= 1;
+      end
 
       reset <= ~reset_n;
    end
 
-   refresh <= 0;
-   if (preCycle == CYCLE_EXT4.prev() && rfsh_cycle == 0) begin
-      sysEnable <= ~pause;
-      refresh <= 1;
+   if (reset || !sysEnable)
+      phase <= 0;
+end
+
+reg [1:0] enablePixel;
+always @(posedge clk_sys) begin
+   enablePixel <= enablePixel + 1'b1;
+   if (reset || !sysEnable || sysCycle == PHASE_END) begin
+      enablePixel <= 0;
    end
 end
 
@@ -182,7 +185,7 @@ video_vicii_656x #(
 ) vicII (
    .clk(clk_sys),
    .reset(reset | model),
-   .enaPixel(vicPixel & ~model),
+   .enaPixel(&enablePixel & ~model),
    .enaData(enableVid & ~model),
    .phi(phase),
 
@@ -313,7 +316,7 @@ always @(posedge clk_sys) begin
       todclk <= 0;
       sum = 0;
    end
-   else begin
+   else if (sysEnable) begin
       if (ntsc) begin
          sum = sum + 120;  // todclk is 60 Hz
       end

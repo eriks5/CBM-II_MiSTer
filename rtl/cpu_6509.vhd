@@ -43,7 +43,7 @@ architecture rtl of cpu_6509 is
 
 	signal exeReg : std_logic_vector(7 downto 0);
 	signal indReg : std_logic_vector(7 downto 0);
-	
+
 	signal indCount : unsigned(1 downto 0);
 	signal indirect : std_logic;
 	signal localAccess : std_logic;
@@ -82,7 +82,7 @@ begin
 				end if;
 			end if;
 
-			if reset = '1' and enable = '1' then
+			if reset = '1' then
 				exeReg <= (others => '1');
 				indReg <= (others => '1');
 			end if;
@@ -98,7 +98,7 @@ begin
 	begin
 		if rising_edge(clk) then
 			if (enable = '1' and rdy = '1') then
-				if reset = '0' and irq_n = '1' and nmi_n = '1' and (DEBUG.I = X"91" or DEBUG.I = X"B1") then
+				if reset = '0' and (DEBUG.I = X"91" or DEBUG.I = X"B1") then
 					indCount <= indCount + 1;
 				else
 					indCount <= (others => '0');

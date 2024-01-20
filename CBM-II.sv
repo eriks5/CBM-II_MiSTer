@@ -203,11 +203,12 @@ localparam CONF_STR = {
 	"CBM-II;;",
 	"-;",
 	"O[1],Model,Professional,Business;",
-	"h0O[16:15],Co-processor,None,Z80,8088;",
 	"H0O[5],CPU Clock,1 MHz,2 MHz;",
+	"h0O[16:15],Co-processor,None,Z80,8088;",
 	"O[3:2],RAM,128K,256K,1M,16M;",
 	"-;",
-	"O[4],TV System,PAL,NTSC;",
+	"H0O[4],TV System,PAL,NTSC;",
+	"h0O[4],Mains freq.,50 Hz,60 Hz;",
 	"O[7:6],Aspect Ratio,Original,Full Screen,[ARC1],[ARC2];",
 	"O[10:8],Scandoubler Fx,None,HQ2x-320,HQ2x-160,CRT 25%,CRT 50%,CRT 75%;",
 	"d1O[11],Vertical Crop,No,Yes;",
@@ -257,7 +258,7 @@ pll_cfg pll_cfg
 	.reconfig_from_pll(reconfig_from_pll)
 );
 
-wire [31:0] CLK = model ? 32_000_000
+wire [31:0] CLK = model ? 36_000_000
                 : ntsc  ? 32_727_266
                 :         31_527_954;
 
@@ -290,16 +291,14 @@ always @(posedge CLK_50M) begin
 					cfg_data <= 0;
 					cfg_write <= 1;
 				end
-				/*
 			3: begin
-					cfg_address <= 4;
-					cfg_data <= ntsc_r ? 'h20504 : 'h404;
+					cfg_address <= 5;
+					cfg_data <= model_r ? 'h80808 : 'h80909;
 					cfg_write <= 1;
 				end
-				*/
 			5: begin
 					cfg_address <= 7;
-					cfg_data <= model_r ? 2233385555 : (ntsc_r ? 3357876127 : 1503512573);
+					cfg_data <= model_r ? 2233382994 : (ntsc_r ? 3357876127 : 1503512573);
 					cfg_write <= 1;
 				end
 			7: begin
@@ -428,10 +427,10 @@ hps_io #(.CONF_STR(CONF_STR)) hps_io
 // always @(posedge clk_sys) act_cnt <= act_cnt + 1'd1;
 // assign LED_USER    = act_cnt[26]  ? act_cnt[25:18]  > act_cnt[7:0]  : act_cnt[25:18]  <= act_cnt[7:0];
 
-wire model = status[1];
-wire copro = status[16:15];
-wire ramsize = status[3:2];
-wire ntsc = status[4];
+wire       model = status[1];
+wire [1:0] copro = status[16:15];
+wire [1:0] ramsize = status[3:2];
+wire       ntsc = status[4];
 
 // ========================================================================
 // SDRAM
