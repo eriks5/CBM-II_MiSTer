@@ -39,14 +39,15 @@ architecture rtl of cpu_6509 is
 	signal localDi : std_logic_vector(7 downto 0);
 	signal localDo : std_logic_vector(7 downto 0);
 	signal localWe : std_logic;
-	signal DEBUG : T_t65_dbg;
+	signal sync : std_logic;
 
+	signal localAccess : std_logic;
 	signal exeReg : std_logic_vector(7 downto 0);
 	signal indReg : std_logic_vector(7 downto 0);
 
-	signal indCount : unsigned(1 downto 0);
-	signal indirect : std_logic;
-	signal localAccess : std_logic;
+	signal indCycles : unsigned(2 downto 0);
+	signal indCount : unsigned(2 downto 0);
+	signal lastA0 : std_logic;
 begin
 
 	cpu: work.T65
@@ -65,7 +66,7 @@ begin
 		DI      => localDi,
 		DO      => localDo,
 		NMI_ack => nmi_ack,
-		DEBUG   => DEBUG
+		Sync    => sync
 	);
 
 	localAccess <= '1' when localA(15 downto 1) = X"000"&"000" else '0';
@@ -74,17 +75,15 @@ begin
 	process(clk)
 	begin
 		if rising_edge(clk) then
-			if localAccess = '1' and localWe = '0' and enable = '1' then
+			if reset = '1' then
+				exeReg <= X"0F";
+				indReg <= X"0F";
+			elsif localAccess = '1' and localWe = '0' and enable = '1' then
 				if localA(0) = '0' then
 					exeReg <=localDo;
 				else
 					indReg <= localDo;
 				end if;
-			end if;
-
-			if reset = '1' then
-				exeReg <= (others => '1');
-				indReg <= (others => '1');
 			end if;
 
 			if widePO = '0' then
@@ -97,20 +96,28 @@ begin
 	process(clk)
 	begin
 		if rising_edge(clk) then
-			if (enable = '1' and rdy = '1') then
-				if reset = '0' and (DEBUG.I = X"91" or DEBUG.I = X"B1") then
-					indCount <= indCount + 1;
-				else
+			if reset = '1' then
+				indCount <= (others => '0');
+			elsif enable = '1' then
+				lastA0 <= localA(0);
+				if sync = '1' and rdy = '1' and din(7 downto 6) = "10" and din(4 downto 0) = "10001" then
+					indCount <= to_unsigned(1, 3);
+					if din(5) = '1' then
+						indCycles <= to_unsigned(4, 3);
+					else
+						indCycles <= to_unsigned(5, 3);
+					end if;
+				elsif (indCount = 1 and (rdy = '0' or localA(0) = lastA0)) or (indCount = indCycles) then
 					indCount <= (others => '0');
+				elsif indCount /= 0 then
+					indCount <= indCount + 1;
 				end if;
 			end if;
 		end if;
 	end process;
 
-	indirect <= '1' when indCount = 3 else '0';
-
 	addr <= unsigned(localA(15 downto 0));
 	dout <= unsigned(localDo) when localAccess = '0' or widePO = '1' else unsigned("0000" & localDo(3 downto 0));
-	pout <= unsigned(indReg) when indirect = '1' else unsigned(exeReg);
+	pout <= unsigned(indReg) when indCount >= 4 else unsigned(exeReg);
 	we <= not localWe;
 end architecture;
