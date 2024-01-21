@@ -196,7 +196,7 @@ assign VGA_SCALER = 0;
 // 0         1         2         3          4         5         6
 // 01234567890123456789012345678901 23456789012345678901234567890123
 // 0123456789ABCDEFGHIJKLMNOPQRSTUV 0123456789ABCDEFGHIJKLMNOPQRSTUV
-// XXXXXXXXXXXXXXXXX
+// XXXXXXXXXXXXXXXXXX
 
 `include "build_id.v"
 localparam CONF_STR = {
@@ -215,6 +215,7 @@ localparam CONF_STR = {
 	"O[13:12],Scale,Normal,V-Integer,Narrower HV-Integer,Wider HV-Integer;",
 	"-;",
 	"O[14],Pause When OSD is Open,No,Yes;",
+	"O[17],Clear RAM on Reset,Yes,No;",
 	"-;"
 ,	"R[0],Reset;",
 	"v,0;",
@@ -318,7 +319,7 @@ always @(posedge clk_sys) begin
 	reg [1:0] copro_r;
 	reg [1:0] ramsize_r;
 	// reg old_download;
-	// reg do_erase = 1;
+	reg do_erase = 1;
 
 	model_r <= model;
 	copro_r <= copro;
@@ -328,7 +329,7 @@ always @(posedge clk_sys) begin
 	// old_download <= ioctl_download;
 
 	if (RESET || status[0] || buttons[1] || (model != model_r) || (copro != copro_r) || (ramsize != ramsize_r) || !pll_locked) begin
-		// if(RESET) do_erase <= 1;
+		if(RESET) do_erase <= 1;
 		reset_counter <= 100000;
 	end
 	// else if(~old_download & ioctl_download & load_prg & ~status[50]) begin
@@ -341,7 +342,7 @@ always @(posedge clk_sys) begin
 	// 	reset_counter <= 255;
 	// end
 	// else if ((ioctl_download || inj_meminit) & ~reset_wait);
-	// else if (erasing) force_erase <= 0;
+	else if (erasing) force_erase <= 0;
 	// else if (!reset_counter) begin
 	// 	do_erase <= 0;
 	// 	if(reset_wait && c64_addr == 'hFFCF) reset_wait <= 0;
@@ -349,7 +350,7 @@ always @(posedge clk_sys) begin
 	// else begin
 	else if (reset_counter) begin
 		reset_counter <= reset_counter - 1;
-		// if (reset_counter == 100 && (~status[24] | do_erase)) force_erase <= 1;
+		if (reset_counter == 100 && (~status[17] | do_erase)) force_erase <= 1;
 	end
 end
 
@@ -433,13 +434,76 @@ wire [1:0] ramsize = status[3:2];
 wire       ntsc = status[4];
 
 // ========================================================================
+// I/O
+// ========================================================================
+
+reg        force_erase;
+reg        erasing;
+
+reg [24:0] ioctl_load_addr;
+reg        ioctl_req_wr;
+
+wire       io_cycle;
+reg        io_cycle_ce;
+reg        io_cycle_we;
+reg [24:0] io_cycle_addr;
+reg  [7:0] io_cycle_data;
+
+always @(posedge clk_sys) begin
+	reg  [4:0] erase_to;
+	reg        io_cycleD;
+
+	io_cycleD <= io_cycle;
+
+	if (~io_cycle & io_cycleD) begin
+		io_cycle_ce <= 1;
+		io_cycle_we <= 0;
+		// io_cycle_addr <= tap_play_addr + TAP_ADDR;
+		if (ioctl_req_wr) begin
+			ioctl_req_wr <= 0;
+			io_cycle_we <= 1;
+			io_cycle_addr <= ioctl_load_addr;
+			ioctl_load_addr <= ioctl_load_addr + 1'b1;
+			if (erasing)
+				io_cycle_data <= ioctl_load_addr[23:16] == 'h0F ? {8{ioctl_load_addr[6]}} : {8{ioctl_load_addr[14]^ioctl_load_addr[3]^ioctl_load_addr[2]}};
+			// else if (inj_meminit) io_cycle_data <= inj_meminit_data;
+			// else io_cycle_data <= ioctl_data;
+		end
+	end
+
+	if (io_cycle & io_cycleD) {io_cycle_ce, io_cycle_we} <= 0;
+
+	if (!erasing && force_erase) begin
+		erasing <= 1;
+		ioctl_load_addr <= 0;
+	end
+
+	if (erasing && !ioctl_req_wr) begin
+		erase_to <= erase_to + 1'b1;
+		if (&erase_to) begin
+			if (  (ramsize == 0 && ioctl_load_addr == 'h01_FFFF)
+			   || (ramsize == 1 && ioctl_load_addr == 'h03_FFFF)) begin
+				ioctl_load_addr <= 'h0F_0000;
+			end
+			else if (ioctl_load_addr == 'h0F_0FFF) begin
+				ioctl_load_addr <= 'h0F_D000;
+			end
+
+			if (ioctl_load_addr < 'h0F_DFFF)
+				ioctl_req_wr <= 1;
+			else
+				erasing <= 0;
+		end
+	end
+end
+
+// ========================================================================
 // SDRAM
 // ========================================================================
 
 assign SDRAM_CKE  = 1;
 
 wire [7:0]  sdram_data;
-wire        ext_cycle;
 
 sdram sdram
 (
@@ -456,10 +520,10 @@ sdram sdram
 	.clk(clk64),
 	.init(~pll_locked),
 	.refresh(refresh),
-	.addr(ext_cycle ? 0 : cpu_addr),
-	.ce  (ext_cycle ? 0 : cpu_ce),
-	.we  (ext_cycle ? 0 : cpu_we),
-	.din (ext_cycle ? 0 : cpu_out),
+	.addr(io_cycle ? io_cycle_addr : cpu_addr),
+	.ce  (io_cycle ? io_cycle_ce   : cpu_ce),
+	.we  (io_cycle ? io_cycle_we   : cpu_we),
+	.din (io_cycle ? io_cycle_data : cpu_out),
 	.dout(sdram_data)
 );
 
@@ -500,7 +564,7 @@ cbm2_main main (
 	.ramWE(cpu_we),
 	.refresh(refresh),
 
-	.ext_cycle(ext_cycle),
+	.io_cycle(io_cycle),
 
 	.hsync(hsync),
 	.vsync(vsync),

@@ -19,7 +19,7 @@ module cbm2_main (
    output        ramWE,
 
    output        refresh,
-   output        ext_cycle,
+   output        io_cycle,
 
    output        hsync,
    output        vsync,
@@ -47,7 +47,7 @@ wire       sys2MHz = model | (turbo & ~(cs_vic | cs_sid));
 wire       ipcEn = model & ~|copro;
 
 // External cycle
-assign ext_cycle = sysCycle >= CYCLE_EXT0 && sysCycle <= CYCLE_EXT3 && (!phase || rfsh_cycle != 0);
+assign io_cycle = sysCycle >= CYCLE_EXT0 && sysCycle <= CYCLE_EXT3 && (!phase || rfsh_cycle != 0);
 
 // Video cycle (VIC or CRTC)
 wire vid_cycle  = sysCycle >= CYCLE_VID0 && sysCycle <= CYCLE_VID3;
