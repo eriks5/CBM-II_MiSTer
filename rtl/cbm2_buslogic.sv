@@ -45,14 +45,14 @@ module cbm2_buslogic (
    input  [7:0]  tpi2Data
 );
 
-reg         cs_rom8, cs_romA, cs_romC, cs_romE;
+reg         cs_rom8, cs_romC, cs_romE;
 
 wire [11:0] rom_addr = 0;
 wire [7:0]  rom_data = 0;
 wire        rom_wr = 0;
 
 wire [7:0] rom8Data;
-rom_mem #(8,13,"rtl/roms/PL/b500-8000.901243-01.mif") rom_basic_lo_p
+rom_mem #(8,14,"rtl/roms/PL/basic-901235+6-02.mif") rom_basic_p
 (
    .clock_a(clk_sys),
    .address_a(rom_addr),
@@ -62,19 +62,6 @@ rom_mem #(8,13,"rtl/roms/PL/b500-8000.901243-01.mif") rom_basic_lo_p
    .clock_b(clk_sys),
    .address_b(systemAddr),
    .q_b(rom8Data)
-);
-
-wire [7:0] romAData;
-rom_mem #(8,13,"rtl/roms/PL/b500-a000.901242-01a.mif") rom_basic_hi_p
-(
-   .clock_a(clk_sys),
-   .address_a(rom_addr),
-   .data_a(rom_data),
-   .wren_a(rom_wr),
-
-   .clock_b(clk_sys),
-   .address_b(systemAddr),
-   .q_b(romAData)
 );
 
 wire [7:0] romCData;
@@ -175,7 +162,6 @@ always @(*) begin
 
    cs_ram <= 0;
    cs_rom8 <= 0;
-   cs_romA <= 0;
    cs_romC <= 0;
    cs_romE <= 0;
 
@@ -186,8 +172,7 @@ always @(*) begin
       if (cpuSeg == 15) // Segment 15
          case(cpuAddr[15:12])
             4'h0: if (~cpuAddr[11] || ipcEn)    cs_ram  <= 1; // Buffer ram
-            4'h8, 4'h9:                         cs_rom8 <= 1; // BASIC ROM lo
-            4'hA, 4'hB:                         cs_romA <= 1; // BASIC ROM hi
+            4'h8, 4'h9, 4'hA, 4'hB:             cs_rom8 <= 1; // BASIC ROM
             4'hC:                               cs_romC <= 1; // Character ROM (P2 only)
             4'hD: case(cpuAddr[11:8])
                      4'h0, 4'h1, 4'h2, 4'h3:    cs_ram  <= 1; // Video RAM
@@ -246,9 +231,6 @@ always @(*) begin
       end
       else if (cs_rom8) begin
          cpuDi <= rom8Data;
-      end
-      else if (cs_romA) begin
-         cpuDi <= romAData;
       end
       else if (cs_romC) begin
          cpuDi <= romCData;
