@@ -5,7 +5,7 @@ set_global_assignment -name SYSTEMVERILOG_FILE rtl/cbm2_main.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/cbm2_buslogic.sv
 set_global_assignment -name VHDL_FILE rtl/fpga64_rgbcolor.vhd
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/misc.sv
-set_global_assignment -name VERILOG_FILE rtl/mos_tpi.v
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/mos_tpi.sv
 set_global_assignment -name VERILOG_FILE rtl/mos6526.v
 set_global_assignment -name VERILOG_FILE rtl/mos6551/uart_6551.v
 set_global_assignment -name VERILOG_FILE rtl/mos6551/6551tx.v

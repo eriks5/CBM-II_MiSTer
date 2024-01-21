@@ -41,10 +41,8 @@ reg       mc_r;
 reg       cb;
 reg       ca;
 
-reg       irq_n;
 reg [4:0] ilr;
-reg [4:0] air;
-reg [4:0] mr;
+reg [4:0] air[6];
 
 wire      rd = !cs_n & rw;
 wire      wr = !cs_n & !rw;
@@ -52,18 +50,18 @@ wire      mc = mode & mc_r;
 
 // Register Decoding
 always @(posedge clk) begin
-  if (!res_n) 
+  if (!res_n)
     db_out <= 8'h00;
   else if (rd)
     case (rs)
       0: db_out <= pa_in;
       1: db_out <= pb_in;
-      2: db_out <= mc ? {cb, ca, irq_n, ilr} : pc_in;
+      2: db_out <= mc ? {cb, ca, irq, ilr} : pc_in;
       3: db_out <= ddra;
       4: db_out <= ddrb;
-      5: db_out <= mc ? {3'b111, mr} : ddrc;
-      6: db_out <= mode ? {crcb, crca, ie, ip, mc} : 8'hff;
-      7: db_out <= mode ? {3'b111, air} : 8'hff;
+      5: db_out <= ddrc;
+      6: db_out <= mode ? {crcb, crca, ie, ip, mc} : 8'h00;
+      7: db_out <= mode ? {3'b000, air[0]} : 8'h00;
     endcase
 end
 
@@ -73,7 +71,7 @@ assign pc_oe = mc ? 8'b11100000 : ddrc;
 
 assign pa_out = pra | ~ddra;
 assign pb_out = prb | ~ddrb;
-assign pc_out = mode && mc ? {cb, ca, irq_n, 5'b11111} : prc | ~ddrc;
+assign pc_out = mc ? {cb, ca, ~irq, 5'b11111} : prc | ~ddrc;
 
 // Port A Output
 always @(posedge clk) begin
@@ -103,7 +101,6 @@ always @(posedge clk) begin
     endcase
 end
 
-
 // Port C Output
 always @(posedge clk) begin
   if (!res_n) begin
@@ -118,6 +115,17 @@ always @(posedge clk) begin
     endcase
 end
 
+wire [4:0] intreq = ilr & ddrc[4:0];
+wire [4:0] actint = air[0] | air[1] | air[2] | air[3] | air[4] | air[5];
+wire [4:0] actmsk = actint[4] ? 5'b00000
+                  : actint[3] ? 5'b10000
+                  : actint[2] ? 5'b11000
+                  : actint[1] ? 5'b11100
+                  : actint[0] ? 5'b11110
+                  :             5'b11111;
+
+wire       irq = |air[0];
+
 // Interrupt control
 always @(posedge clk) begin
   reg [4:0] pc_in_r;
@@ -125,77 +133,98 @@ always @(posedge clk) begin
 
   pc_in_r <= pc_in[4:0];
 
-  if (!res_n) begin
-    irq_n <= 1'b1;
-    ilr   <= 0;
-    air   <= 0;
-    crcb  <= 2'b00;
-    crca  <= 2'b00;
+  if (!res_n || !mode) begin
+    mc_r  <= 1'b0;
+    ilr   <= 5'b0;
+    air   <= '{0, 0, 0, 0, 0, 0};
+    crcb  <= 2'b0;
+    crca  <= 2'b0;
     ca    <= 1'b0;
     cb    <= 1'b0;
     ie    <= 1'b0;
     ip    <= 1'b0;
-    mc_r  <= 1'b0;
     pulsecnt <= 0;
   end
-  else if (mode) begin
-    if (pulsecnt > 0) begin
-      pulsecnt <= pulsecnt - 1'b1;
-      if (pulsecnt == 1) begin
-        if (crca == 1) ca <= 1'b1;
-        if (crcb == 1) cb <= 1'b1;
-      end
-    end
-
+  else begin
     if (wr && rs == 6) begin
       {crcb, crca, ie, ip, mc_r} <= db_in;
       ca <= db_in[4];
       cb <= db_in[6];
     end
     else if (mc) begin
+      if (pulsecnt) begin
+        pulsecnt <= pulsecnt - 1'b1;
+        if (pulsecnt == 1) begin
+          if (crca == 2'b01) ca <= 1'b1;
+          if (crcb == 2'b01) cb <= 1'b1;
+        end
+      end
+
       if (rd) begin
-        case (rs) 
+        case (rs)
           0: if (!crca[1]) begin
               ca <= 1'b0;
               if (!crca[0]) pulsecnt <= 17;
-            end
+          end
           1: if (!crcb[1]) begin
               cb <= 1'b0;
               if (!crcb[0]) pulsecnt <= 17;
-            end
+          end
+          7: begin
+              if (ip)
+                air[1:5] <= air[0:4];
+
+              ilr <= ilr & ~air[0];
+              air[0] <= 5'b0;
+          end
           default: ;
         endcase
-      end 
+      end
       else if (wr) begin
         case (rs)
           2: ilr <= ilr & db_in[4:0];
-          5: mr  <= db_in[4:0];
-          7: air <= db_in[4:0];
+          7: if (ip) begin
+              air[1:4] <= air[2:5];
+              air[5] <= 5'b0;
+          end
           default: ;
         endcase
       end
-      else begin
-        if (pc_in[0] && !pc_in_r[0]) begin
-          ilr[0] <= 1'b1;
-        end
-        if (pc_in[1] && !pc_in_r[1]) begin
-          ilr[1] <= 1'b1;
-        end
-        if (pc_in[2] && !pc_in_r[2]) begin
-          ilr[2] <= 1'b1;
-        end
-        if ((pc_in[3]^ie[0]) && !(pc_in_r[3]^ie[0])) begin
-          ilr[3] <= 1'b1;
-          if (crca == 0) ca <= 1'b1;
-        end
-        if ((pc_in[4]^ie[1]) && !(pc_in_r[4]^ie[1])) begin
-          ilr[4] <= 1'b1;
-          if (crcb == 0) cb <= 1'b1;
-        end
+
+      if (!pc_in[0] && pc_in_r[0]) begin
+        ilr[0] <= 1'b1;
       end
-    end 
+      if (!pc_in[1] && pc_in_r[1]) begin
+        ilr[1] <= 1'b1;
+      end
+      if (!pc_in[2] && pc_in_r[2]) begin
+        ilr[2] <= 1'b1;
+      end
+      if (!(pc_in[3]^ie[0]) && (pc_in_r[3]^ie[0])) begin
+        if (crca == 2'b00) ca <= 1'b1;
+        ilr[3] <= 1'b1;
+      end
+      if (!(pc_in[4]^ie[1]) && (pc_in_r[4]^ie[1])) begin
+        if (crcb == 2'b00) cb <= 1'b1;
+        ilr[4] <= 1'b1;
+      end
+
+      if (!ip && intreq && !air[0])
+        air[0] <= intreq;
+
+      if (ip && (intreq & actmsk))
+        air[0] <= intreq[4] ? 5'b10000
+                : intreq[3] ? 5'b01000
+                : intreq[2] ? 5'b00100
+                : intreq[1] ? 5'b00010
+                :             5'b00001;
+    end
+    else begin
+      ilr <= 5'b0;
+      air <= '{0, 0, 0, 0, 0, 0};
+      pulsecnt <= 0;
+    end
   end
 end
-
 
 endmodule
