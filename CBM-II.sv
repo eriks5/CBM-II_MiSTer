@@ -471,7 +471,7 @@ always @(posedge clk_sys) begin
 		end
 	end
 
-	if (io_cycle & io_cycleD) {io_cycle_ce, io_cycle_we} <= 0;
+	if (io_cycle & ~io_cycleD) io_cycle_ce <= 0;
 
 	if (!erasing && force_erase) begin
 		erasing <= 1;

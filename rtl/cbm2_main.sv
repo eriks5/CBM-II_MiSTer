@@ -47,7 +47,7 @@ wire       sys2MHz = model | (turbo & ~(cs_vic | cs_sid));
 wire       ipcEn = model & ~|copro;
 
 // External cycle
-assign io_cycle = sysCycle >= CYCLE_EXT0 && sysCycle <= CYCLE_EXT3 && (!phase || rfsh_cycle != 0);
+assign io_cycle = sysCycle >= CYCLE_EXT0 && sysCycle <= CYCLE_EXT3 && rfsh_cycle != 1;
 
 // Video cycle (VIC or CRTC)
 wire vid_cycle  = sysCycle >= CYCLE_VID0 && sysCycle <= CYCLE_VID3;
@@ -96,9 +96,6 @@ always @(posedge clk_sys) begin
 
       reset <= ~reset_n;
    end
-
-   if (reset || !sysEnable)
-      phase <= 0;
 end
 
 reg [1:0] enablePixel;
