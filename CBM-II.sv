@@ -557,6 +557,9 @@ cbm2_main main (
 	.clk_sys(clk_sys),
 	.reset_n(reset_n),
 
+	.kbd_reset(0),
+	.ps2_key(ps2_key),
+
 	.ramAddr(cpu_addr),
 	.ramData(sdram_data),
 	.ramOut(cpu_out),

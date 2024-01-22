@@ -12,6 +12,9 @@ module cbm2_main (
    input         clk_sys,
    input         reset_n,
 
+   input  [10:0] ps2_key,
+   input         kbd_reset,
+
    output [24:0] ramAddr,
    input  [7:0]  ramData,    // from sdram
    output [7:0]  ramOut,     // to sdram
@@ -119,6 +122,7 @@ reg [7:0]  cpuDo;
 // ============================================================================
 
 wire irq_n = irq_tpi1 & irq_vic;
+wire nmi_n = ~key_nmi;
 
 cpu_6509 cpu (
    .widePO(&ramSize),
@@ -126,7 +130,7 @@ cpu_6509 cpu (
    .enable(enableCpu),
    .reset(reset),
 
-   .nmi_n(1),
+   .nmi_n(nmi_n),
    // .nmi_ack(nmi_ack),
    .irq_n(irq_n),
    .rdy(1),
@@ -148,14 +152,12 @@ reg        aec;
 reg        irq_vic;
 
 // reg [7:0]  vicBus;
-reg [15:0] vicAddr;
+reg [13:0] vicAddr;
 reg [3:0]  colData;
 reg [7:0]  vicDi;
 
 reg [7:0]  vicData;
 reg [3:0]  vicColorIndex;
-
-assign vicAddr[15:14] = ~tpi2_pbo[7:6];
 
 // always @(posedge clk_sys) begin
 //    if (phase) begin
@@ -207,7 +209,7 @@ video_vicii_656x #(
    .diColor(colData),
    .DO(vicData),
 
-   .vicAddr(vicAddr[13:0]),
+   .vicAddr(vicAddr),
    .addrValid(aec),
    .irq_n(irq_vic),
 
@@ -400,7 +402,7 @@ glb6551 acia (
 //   CA  : VIC MATRIX SELECT
 // ============================================================================
 
-reg [7:0]  tpi1Data;
+reg  [7:0] tpi1Data;
 wire [7:0] tpi1_pao;
 wire [7:0] tpi1_pbo;
 wire [7:0] tpi1_pco;
@@ -441,13 +443,13 @@ mos_tpi tpi1 (
    .db_in(cpuDo),
    .db_out(tpi1Data),
 
-   .pa_in({nrfd_i, ndac_i, eoi_i, dav_i, atn_i, ren_i, 2'b11}),
+   .pa_in({nrfd_i, ndac_i, eoi_i, dav_i, atn_i, ren_i, tpi1_pao[1:0]}),
    .pa_out(tpi1_pao),
 
-   .pb_in({6'b111111, srq_i, ifc_i}),
+   .pb_in({tpi1_pbo[7:2], srq_i, ifc_i}),
    .pb_out(tpi1_pbo),
 
-   .pc_in({3'b111, irq_acia, irq_ipcia, irq_cia, srq_i & srq_o, todclk}),
+   .pc_in({tpi1_pco[7:5], irq_acia, irq_ipcia, irq_cia, srq_i & srq_o, todclk}),
    .pc_out(tpi1_pco)
 );
 
@@ -482,8 +484,9 @@ mos_tpi tpi1 (
 //   PC7 : VIC 16K BANK SELECT HI
 // ============================================================================
 
-reg [7:0]  tpi2Data;
+reg  [7:0] tpi2Data;
 
+wire [5:0] tpi2_pci;
 wire [7:0] tpi2_pao;
 wire [7:0] tpi2_pbo;
 wire [7:0] tpi2_pco;
@@ -500,14 +503,33 @@ mos_tpi tpi2 (
    .db_in(cpuDo),
    .db_out(tpi2Data),
 
-   .pa_in(8'b11111111),
+   .pa_in(tpi2_pao),
    .pa_out(tpi2_pao),
 
-   .pb_in(8'b11111111),
+   .pb_in(tpi2_pbo),
    .pb_out(tpi2_pbo),
 
-   .pc_in(8'b11111111),
+   .pc_in({tpi2_pco[7:6], tpi2_pci}),
    .pc_out(tpi2_pco)
+);
+
+// ============================================================================
+// Keyboard
+// ============================================================================
+
+reg key_nmi;
+
+cbm2_keyboard keyboard (
+   .clk(clk_sys),
+   .reset(kbd_reset),
+   .ps2_key(ps2_key),
+
+   .pai(tpi2_pao),
+   .pbi(tpi2_pbo),
+   .pci(tpi2_pco[5:0]),
+   .pco(tpi2_pci[5:0]),
+
+   .nmi(key_nmi)
 );
 
 // ============================================================================
@@ -539,7 +561,7 @@ cbm2_buslogic buslogic (
    .cpuDi(cpuDi),
 
    .vidCycle(vid_cycle),
-   .vidAddr(vicAddr),
+   .vidAddr({tpi2_pco[7:6], vicAddr}),
    .vidDi(vicDi),
 
    .vicdotsel(vicdotsel),
