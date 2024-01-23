@@ -196,7 +196,7 @@ assign VGA_SCALER = 0;
 // 0         1         2         3          4         5         6
 // 01234567890123456789012345678901 23456789012345678901234567890123
 // 0123456789ABCDEFGHIJKLMNOPQRSTUV 0123456789ABCDEFGHIJKLMNOPQRSTUV
-// XXXXXXXXXXXXXXXXXX
+// XXXXXXXXXXXXXXXXXXX
 
 `include "build_id.v"
 localparam CONF_STR = {
@@ -214,10 +214,12 @@ localparam CONF_STR = {
 	"d1O[11],Vertical Crop,No,Yes;",
 	"O[13:12],Scale,Normal,V-Integer,Narrower HV-Integer,Wider HV-Integer;",
 	"-;",
+	"O[18],Release Keys on Reset,Yes,No;",
+	"O[17],Clear All RAM on Reset,Yes,No;",
 	"O[14],Pause When OSD is Open,No,Yes;",
-	"O[17],Clear RAM on Reset,Yes,No;",
-	"-;"
-,	"R[0],Reset;",
+	"-;",
+ 	"R[0],Hard reset;",
+	"R[19],Soft reset;",
 	"v,0;",
 	"V,v",`BUILD_DATE
 };
@@ -312,52 +314,48 @@ always @(posedge CLK_50M) begin
 end
 
 reg reset_n;
+
 // reg reset_wait = 0;
 always @(posedge clk_sys) begin
 	integer   reset_counter;
 	reg       model_r;
 	reg [1:0] copro_r;
 	reg [1:0] ramsize_r;
-	// reg old_download;
-	reg do_erase = 1;
+	reg [2:0] do_erase = 2;  // 0 - no erase, 1 - erase segment 15 only, 2 - erase all segments
 
 	model_r <= model;
 	copro_r <= copro;
 	ramsize_r <= ramsize;
 
 	reset_n <= !reset_counter;
-	// old_download <= ioctl_download;
 
-	if (RESET || status[0] || buttons[1] || (model != model_r) || (copro != copro_r) || (ramsize != ramsize_r) || !pll_locked) begin
-		if(RESET) do_erase <= 1;
+	if (RESET || (model != model_r) || (copro != copro_r) || (ramsize != ramsize_r) || status[0] || status[19] || buttons[1] || soft_reset || !pll_locked) begin
+		if (RESET)
+			do_erase <= 2;
+		else if ((status[0] || (model != model_r) || (copro != copro_r) || (ramsize != ramsize_r)) && do_erase < 2)
+			do_erase <= status[17] ? 1 : 2;
+
 		reset_counter <= 100000;
 	end
-	// else if(~old_download & ioctl_download & load_prg & ~status[50]) begin
-	// 	do_erase <= 1;
-	// 	reset_wait <= 1;
-	// 	reset_counter <= 255;
-	// end
-	// else if (ioctl_download & (load_crt | load_rom)) begin
-	// 	do_erase <= 1;
-	// 	reset_counter <= 255;
-	// end
-	// else if ((ioctl_download || inj_meminit) & ~reset_wait);
 	else if (erasing) force_erase <= 0;
-	// else if (!reset_counter) begin
-	// 	do_erase <= 0;
-	// 	if(reset_wait && c64_addr == 'hFFCF) reset_wait <= 0;
-	// end
-	// else begin
+	else if (!reset_counter) do_erase <= 0;
 	else if (reset_counter) begin
 		reset_counter <= reset_counter - 1;
-		if (reset_counter == 100 && (~status[17] | do_erase)) force_erase <= 1;
+		if (reset_counter == 100) force_erase <= do_erase;
 	end
 end
 
-wire         forced_scandoubler;
-wire   [1:0] buttons;
 wire [127:0] status;
+
+wire         forced_scandoubler;
+
 wire  [10:0] ps2_key;
+wire   [2:0] ps2_kbd_led_status = {2'b00, sftlk_sense};
+wire   [2:0] ps2_kbd_led_use = 3'b001;
+
+wire   [1:0] buttons;
+wire         sftlk_sense;
+
 wire  [21:0] gamma_bus;
 
 hps_io #(.CONF_STR(CONF_STR)) hps_io
@@ -367,66 +365,18 @@ hps_io #(.CONF_STR(CONF_STR)) hps_io
 	.EXT_BUS(),
 
 	.status(status),
-	.status_menumask({ |vcrop, status[1] }),
+	.status_menumask({
+		/* 1 */ |vcrop,
+		/* 0 */ status[1]
+	}),
 	.buttons(buttons),
 	.forced_scandoubler(forced_scandoubler),
 	.gamma_bus(gamma_bus),
 
-	.ps2_key(ps2_key)
+   .ps2_key(ps2_key),
+   .ps2_kbd_led_status(ps2_kbd_led_status),
+   .ps2_kbd_led_use(ps2_kbd_led_use)
 );
-
-///////////////////////   CLOCKS   ///////////////////////////////
-
-// wire clk_sys;
-// pll pll
-// (
-// 	.refclk(CLK_50M),
-// 	.rst(0),
-// 	.outclk_0(clk_sys)
-// );
-
-// wire reset = RESET | status[0] | buttons[1];
-
-// wire [1:0] col = status[4:3];
-
-// wire HBlank;
-// wire HSync;
-// wire VBlank;
-// wire VSync;
-// wire ce_pix;
-// wire [7:0] video;
-
-// CBM2 CBM2
-// (
-// 	.clk(clk_sys),
-// 	.reset(reset),
-
-// 	.pal(status[2]),
-// 	.scandouble(forced_scandoubler),
-
-// 	.ce_pix(ce_pix),
-
-// 	.HBlank(HBlank),
-// 	.HSync(HSync),
-// 	.VBlank(VBlank),
-// 	.VSync(VSync),
-
-// 	.video(video)
-// );
-
-// assign CLK_VIDEO = clk_sys;
-// assign CE_PIXEL = ce_pix;
-
-// assign VGA_DE = ~(HBlank | VBlank);
-// assign VGA_HS = HSync;
-// assign VGA_VS = VSync;
-// assign VGA_G  = (!col || col == 2) ? video : 8'd0;
-// assign VGA_R  = (!col || col == 1) ? video : 8'd0;
-// assign VGA_B  = (!col || col == 3) ? video : 8'd0;
-
-// reg  [26:0] act_cnt;
-// always @(posedge clk_sys) act_cnt <= act_cnt + 1'd1;
-// assign LED_USER    = act_cnt[26]  ? act_cnt[25:18]  > act_cnt[7:0]  : act_cnt[25:18]  <= act_cnt[7:0];
 
 wire       model = status[1];
 wire [1:0] copro = status[16:15];
@@ -437,7 +387,7 @@ wire       ntsc = status[4];
 // I/O
 // ========================================================================
 
-reg        force_erase;
+reg [1:0]  force_erase;  // 1 - erase segment 15, 2 - erase all segments
 reg        erasing;
 
 reg [24:0] ioctl_load_addr;
@@ -458,7 +408,6 @@ always @(posedge clk_sys) begin
 	if (~io_cycle & io_cycleD) begin
 		io_cycle_ce <= 1;
 		io_cycle_we <= 0;
-		// io_cycle_addr <= tap_play_addr + TAP_ADDR;
 		if (ioctl_req_wr) begin
 			ioctl_req_wr <= 0;
 			io_cycle_we <= 1;
@@ -466,8 +415,6 @@ always @(posedge clk_sys) begin
 			ioctl_load_addr <= ioctl_load_addr + 1'b1;
 			if (erasing)
 				io_cycle_data <= ioctl_load_addr[23:16] == 'h0F ? {8{ioctl_load_addr[6]}} : {8{ioctl_load_addr[14]^ioctl_load_addr[3]^ioctl_load_addr[2]}};
-			// else if (inj_meminit) io_cycle_data <= inj_meminit_data;
-			// else io_cycle_data <= ioctl_data;
 		end
 	end
 
@@ -475,14 +422,16 @@ always @(posedge clk_sys) begin
 
 	if (!erasing && force_erase) begin
 		erasing <= 1;
-		ioctl_load_addr <= 0;
+		ioctl_load_addr <= force_erase == 1 ? 'h0F_0000 : model && ramsize < 2 ? 'h01_0000 : 'h00_0000;
 	end
 
 	if (erasing && !ioctl_req_wr) begin
 		erase_to <= erase_to + 1'b1;
 		if (&erase_to) begin
-			if (  (ramsize == 0 && ioctl_load_addr == 'h01_FFFF)
-			   || (ramsize == 1 && ioctl_load_addr == 'h03_FFFF)) begin
+			if (  (ramsize == 0 && model == 0 && ioctl_load_addr == 'h01_FFFF)
+			   || (ramsize == 0 && model == 1 && ioctl_load_addr == 'h02_FFFF)
+			   || (ramsize == 1 && model == 0 && ioctl_load_addr == 'h03_FFFF)
+				|| (ramsize == 1 && model == 1 && ioctl_load_addr == 'h04_FFFF)) begin
 				ioctl_load_addr <= 'h0F_0000;
 			end
 			else if (ioctl_load_addr == 'h0F_0FFF) begin
@@ -557,7 +506,7 @@ cbm2_main main (
 	.clk_sys(clk_sys),
 	.reset_n(reset_n),
 
-	.kbd_reset(0),
+	.kbd_reset(~reset_n & ~status[18]),
 	.ps2_key(ps2_key),
 
 	.ramAddr(cpu_addr),
@@ -573,7 +522,10 @@ cbm2_main main (
 	.vsync(vsync),
 	.r(r),
 	.g(g),
-	.b(b)
+	.b(b),
+
+	.sftlk_sense(sftlk_sense),
+	.soft_reset(soft_reset)
 );
 
 // ========================================================================

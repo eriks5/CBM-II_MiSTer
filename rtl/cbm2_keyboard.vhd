@@ -26,8 +26,9 @@ entity cbm2_keyboard is
 		pci			: in unsigned(5 downto 0);
 		pco			: out unsigned(5 downto 0);
 
-		tape_play   : out std_logic;
-		nmi         : out std_logic
+		soft_reset  : out std_logic;
+
+		sftlk_sense : out std_logic
 	);
 end cbm2_keyboard;
 
@@ -102,8 +103,8 @@ architecture rtl of cbm2_keyboard is
 	signal key_capslock: std_logic := '0';
 	signal key_ce: std_logic := '0';
 	signal key_comma: std_logic := '0';
-	signal key_commodore: std_logic := '0';
-	signal key_ctrl: std_logic := '0';
+	signal key_ctrll: std_logic := '0';
+	signal key_ctrlr: std_logic := '0';
 	signal key_del: std_logic := '0';
 	signal key_dot: std_logic := '0';
 	signal key_down: std_logic := '0';
@@ -112,7 +113,7 @@ architecture rtl of cbm2_keyboard is
 	signal key_esc: std_logic := '0';
 	signal key_home: std_logic := '0';
 	signal key_ins: std_logic := '0';
-	signal key_lalt: std_logic := '0';
+	signal key_altl: std_logic := '0';
 	signal key_lbrack: std_logic := '0';
 	signal key_left: std_logic := '0';
 	signal key_minus: std_logic := '0';
@@ -135,7 +136,7 @@ architecture rtl of cbm2_keyboard is
 	signal key_rvs: std_logic := '0';
 	signal key_pi: std_logic := '0';
 	signal key_quote: std_logic := '0';
-	signal key_ralt: std_logic := '0';
+	signal key_altr: std_logic := '0';
 	signal key_rbrack: std_logic := '0';
 	signal key_return: std_logic := '0';
 	signal key_right: std_logic := '0';
@@ -148,20 +149,31 @@ architecture rtl of cbm2_keyboard is
 	signal key_tab: std_logic := '0';
 	signal key_up: std_logic := '0';
 
-	-- for joystick emulation on PS2
-	signal old_state : std_logic;
+	signal capslock_0 : std_logic := '0';
+	signal capslock_state : std_logic := '0';
 
 	signal ps2_stb   : std_logic;
 
 	signal key_shift : std_logic;
 	signal key_alt   : std_logic;
+	signal key_ctrl  : std_logic;
 
 begin
-	key_shift <= key_shiftl or key_shiftr or key_capslock;
-	key_alt <= key_lalt or key_ralt;
+	capslock_toggle: process(clk)
+	begin
+		if rising_edge(clk) then
+			capslock_0 <= key_capslock;
+			if (key_capslock = '1' and capslock_0 = '0') then
+				capslock_state <= not capslock_state;
+			end if;
+		end if;
+	end process;
 
-	tape_play <= key_F11 and (not key_alt);
-	nmi <= key_F11 and key_alt;
+	key_shift <= key_shiftl or key_shiftr or capslock_state;
+	key_alt <= key_altl or key_altr;
+	key_ctrl <= key_ctrll or key_ctrlr;
+
+	soft_reset <= key_alt and key_F11;
 
 	pressed <= ps2_key(9);
 	matrix: process(clk)
@@ -203,7 +215,7 @@ begin
 							(pai(4) or not (key_alt and key_numslash)) and
 							(pai(5) or not key_ce) and
 							(pai(6) or not key_numstar) and
-							(pai(7) or not ((not key_alt) and key_numslash));
+							(pai(7) or not (not key_alt and key_numslash));
 
 			pco(2) <= pci(2) and
 							(pbi(0) or not key_tab) and
@@ -241,7 +253,7 @@ begin
 							(pai(7) or not key_numplus);
 
 			pco(4) <= pci(4) and
-							(pbi(0) or not (key_shift or key_ins)) and
+							(pbi(0) or not key_shift) and
 							(pbi(1) or not key_Z) and
 							(pbi(2) or not key_X) and
 							(pbi(3) or not key_F) and
@@ -252,7 +264,7 @@ begin
 							(pai(0) or not key_semicolon) and
 							(pai(1) or not key_lbrack) and
 							(pai(2) or not key_return) and
-							(pai(3) or not key_commodore) and
+							(pai(3) or not (not key_alt and key_F11)) and
 							(pai(4) or not key_num1) and
 							(pai(5) or not key_num2) and
 							(pai(6) or not key_num3) and
@@ -269,7 +281,7 @@ begin
 							(pai(0) or not key_slash) and
 							(pai(1) or not key_quote) and
 							(pai(2) or not key_pi) and
-							(pai(4) or not ((not key_alt) and key_num0)) and
+							(pai(4) or not (not key_alt and key_num0)) and
 							(pai(5) or not key_numdot) and
 							(pai(6) or not (key_alt and key_num0));
 
@@ -286,9 +298,9 @@ begin
 					when "0" & X"0C" => key_F4 <= pressed;
 					when "0" & X"0D" => key_tab <= pressed;
 					when "0" & X"0E" => key_arrowleft <= pressed;
-					when "0" & X"11" => key_lalt <= pressed;
+					when "0" & X"11" => key_altl <= pressed;
 					when "0" & X"12" => key_shiftl <= pressed;
-					when "0" & X"14" => key_ctrl <= pressed; -- Ctrl (left)
+					when "0" & X"14" => key_ctrll <= pressed; -- Ctrl (left)
 					when "0" & X"15" => key_Q <= pressed;
 					when "0" & X"16" => key_1 <= pressed;
 					when "0" & X"1A" => key_Z <= pressed;
@@ -358,14 +370,14 @@ begin
 					when "0" & X"7D" => key_num9 <= pressed;
 					when "0" & X"83" => key_F7 <= pressed;
 
-					when "1" & X"11" => key_ralt <= pressed;
-					when "1" & X"14" => key_commodore <= pressed; -- Ctrl (right)
+					when "1" & X"11" => key_altr <= pressed;
+					when "1" & X"14" => key_ctrlr <= pressed; -- Ctrl (right)
 					when "1" & X"4A" => key_numslash <= pressed;
 					when "1" & X"5A" => key_enter <= pressed;
-					when "1" & X"69" => key_runstop <= pressed;
+					when "1" & X"69" => key_runstop <= pressed; -- End
 					when "1" & X"6B" => key_left <= pressed;
 					when "1" & X"6C" => key_home <= pressed;
-					when "1" & X"70" => key_ins <= pressed;
+					when "1" & X"70" => key_ins <= pressed;  -- Ins
 					when "1" & X"71" => key_ce <= pressed;  -- Del
 					when "1" & X"72" => key_down <= pressed;
 					when "1" & X"74" => key_right <= pressed;
@@ -428,8 +440,8 @@ begin
 				key_capslock <= '0';
 				key_ce <= '0';
 				key_comma <= '0';
-				key_commodore <= '0';
-				key_ctrl <= '0';
+				key_ctrll <= '0';
+				key_ctrlr <= '0';
 				key_del <= '0';
 				key_dot <= '0';
 				key_down <= '0';
@@ -438,7 +450,7 @@ begin
 				key_equal <= '0';
 				key_home <= '0';
 				key_ins <= '0';
-				key_lalt <= '0';
+				key_altl <= '0';
 				key_lbrack <= '0';
 				key_left <= '0';
 				key_minus <= '0';
@@ -461,7 +473,7 @@ begin
 				key_rvs <= '0';
 				key_pi <= '0';
 				key_quote <= '0';
-				key_ralt <= '0';
+				key_altr <= '0';
 				key_rbrack <= '0';
 				key_return <= '0';
 				key_right <= '0';
@@ -474,6 +486,8 @@ begin
 				key_tab <= '0';
 				key_up <= '0';
 			end if;
+
+			sftlk_sense <= capslock_state;
 		end if;
 	end process;
 end architecture;

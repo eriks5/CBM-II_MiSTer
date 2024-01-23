@@ -28,7 +28,10 @@ module cbm2_main (
    output        vsync,
    output [7:0]  r,
    output [7:0]  g,
-   output [7:0]  b
+   output [7:0]  b,
+
+   output        sftlk_sense,
+   output        soft_reset
 );
 
 typedef enum bit[4:0] {
@@ -122,7 +125,6 @@ reg [7:0]  cpuDo;
 // ============================================================================
 
 wire irq_n = irq_tpi1 & irq_vic;
-wire nmi_n = ~key_nmi;
 
 cpu_6509 cpu (
    .widePO(&ramSize),
@@ -130,7 +132,7 @@ cpu_6509 cpu (
    .enable(enableCpu),
    .reset(reset),
 
-   .nmi_n(nmi_n),
+   .nmi_n(1),
    // .nmi_ack(nmi_ack),
    .irq_n(irq_n),
    .rdy(1),
@@ -517,8 +519,6 @@ mos_tpi tpi2 (
 // Keyboard
 // ============================================================================
 
-reg key_nmi;
-
 cbm2_keyboard keyboard (
    .clk(clk_sys),
    .reset(kbd_reset),
@@ -529,7 +529,8 @@ cbm2_keyboard keyboard (
    .pci(tpi2_pco[5:0]),
    .pco(tpi2_pci[5:0]),
 
-   .nmi(key_nmi)
+   .soft_reset(soft_reset),
+   .sftlk_sense(sftlk_sense)
 );
 
 // ============================================================================
