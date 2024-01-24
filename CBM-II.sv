@@ -196,7 +196,7 @@ assign VGA_SCALER = 0;
 // 0         1         2         3          4         5         6
 // 01234567890123456789012345678901 23456789012345678901234567890123
 // 0123456789ABCDEFGHIJKLMNOPQRSTUV 0123456789ABCDEFGHIJKLMNOPQRSTUV
-// XXXXXXXXXXXXXXXXXXX
+// XXXXXXXXXXXXXXXXXXXXX
 
 `include "build_id.v"
 localparam CONF_STR = {
@@ -204,15 +204,26 @@ localparam CONF_STR = {
 	"-;",
 	"O[1],Model,Professional,Business;",
 	"H0O[5],CPU Clock,1 MHz,2 MHz;",
-	"h0O[16:15],Co-processor,None,Z80,8088;",
-	"O[3:2],RAM,128K,256K,1M,16M;",
+	"h0O[20],Profile,Low,High;",
+	"h1O[16:15],Co-processor,None,Z80,8088;",
+	"O[3:2],RAM,128K,256K,1M;",
 	"-;",
 	"H0O[4],TV System,PAL,NTSC;",
 	"h0O[4],Mains freq.,50 Hz,60 Hz;",
 	"O[7:6],Aspect Ratio,Original,Full Screen,[ARC1],[ARC2];",
 	"O[10:8],Scandoubler Fx,None,HQ2x-320,HQ2x-160,CRT 25%,CRT 50%,CRT 75%;",
-	"d1O[11],Vertical Crop,No,Yes;",
+	"d2O[11],Vertical Crop,No,Yes;",
 	"O[13:12],Scale,Normal,V-Integer,Narrower HV-Integer,Wider HV-Integer;",
+	"-;",
+  	"FC8,ROMBIN,Rom (External)      @ $1000 ;",
+  	"FC7,ROMBIN,Rom (External)      @ $2000 ;",
+  	"FC6,ROMBIN,Rom (External)      @ $4000 ;",
+  	"FC5,ROMBIN,Rom (External)      @ $6000 ;",
+  	"FC4,ROMBIN,Rom (Basic)         @ $8000 ;",
+	"H0FC3,ROMBIN,Rom (VIC Char)      @ $C000 ;",
+	"h0FC3,ROMBIN,Rom (External)      @ $C000 ;",
+   "FC2,ROMBIN,Rom (Kernal)        @ $E000 ;",
+   "h0FC9,ROMBIN,Rom (CRTC Char)            ;",
 	"-;",
 	"O[18],Release Keys on Reset,Yes,No;",
 	"O[17],Clear All RAM on Reset,Yes,No;",
@@ -314,28 +325,33 @@ always @(posedge CLK_50M) begin
 end
 
 reg reset_n;
-
-// reg reset_wait = 0;
+reg reset_wait = 0;
 always @(posedge clk_sys) begin
 	integer   reset_counter;
 	reg       model_r;
+	reg       profile_r;
 	reg [1:0] copro_r;
 	reg [1:0] ramsize_r;
-	reg [2:0] do_erase = 2;  // 0 - no erase, 1 - erase segment 15 only, 2 - erase all segments
+	reg [1:0] do_erase = 2'd2;  // 0 - no erase, 1 - erase segment 15 only, 2 - erase all segments
 
 	model_r <= model;
+	profile_r <= profile;
 	copro_r <= copro;
 	ramsize_r <= ramsize;
 
 	reset_n <= !reset_counter;
 
-	if (RESET || (model != model_r) || (copro != copro_r) || (ramsize != ramsize_r) || status[0] || status[19] || buttons[1] || soft_reset || !pll_locked) begin
+	if (RESET || (model != model_r) || (profile != profile_r) || (copro != copro_r) || (ramsize != ramsize_r) || status[0] || status[19] || buttons[1] || soft_reset || !pll_locked) begin
 		if (RESET)
-			do_erase <= 2;
-		else if ((status[0] || (model != model_r) || (copro != copro_r) || (ramsize != ramsize_r)) && do_erase < 2)
-			do_erase <= status[17] ? 1 : 2;
+			do_erase <= 2'd2;
+		else if ((status[0] || (model != model_r) || (profile != profile_r) || (copro != copro_r) || (ramsize != ramsize_r)) && do_erase < 2)
+			do_erase <= status[17] ? 2'd1 : 2'd2;
 
 		reset_counter <= 100000;
+	end
+	else if (ioctl_download && (load_rom1 || load_rom2 || load_rom4 || load_rom6 || load_rom8 || (load_romC && model) || load_romE)) begin
+		do_erase <= status[17] ? 2'd1 : 2'd2;
+		reset_counter <= 255;
 	end
 	else if (erasing) force_erase <= 0;
 	else if (!reset_counter) do_erase <= 0;
@@ -348,6 +364,12 @@ end
 wire [127:0] status;
 
 wire         forced_scandoubler;
+
+wire         ioctl_wr;
+wire  [24:0] ioctl_addr;
+wire   [7:0] ioctl_data;
+wire   [7:0] ioctl_index;
+wire         ioctl_download;
 
 wire  [10:0] ps2_key;
 wire   [2:0] ps2_kbd_led_status = {2'b00, sftlk_sense};
@@ -366,8 +388,9 @@ hps_io #(.CONF_STR(CONF_STR)) hps_io
 
 	.status(status),
 	.status_menumask({
-		/* 1 */ |vcrop,
-		/* 0 */ status[1]
+		/* 2 */ |vcrop,
+		/* 1 */ model & profile,
+		/* 0 */ model
 	}),
 	.buttons(buttons),
 	.forced_scandoubler(forced_scandoubler),
@@ -375,11 +398,28 @@ hps_io #(.CONF_STR(CONF_STR)) hps_io
 
    .ps2_key(ps2_key),
    .ps2_kbd_led_status(ps2_kbd_led_status),
-   .ps2_kbd_led_use(ps2_kbd_led_use)
+   .ps2_kbd_led_use(ps2_kbd_led_use),
+
+	.ioctl_download(ioctl_download),
+	.ioctl_index(ioctl_index),
+	.ioctl_wr(ioctl_wr),
+	.ioctl_addr(ioctl_addr),
+	.ioctl_dout(ioctl_data),
+	.ioctl_wait(ioctl_req_wr|reset_wait)
 );
 
+wire load_char  = ioctl_index[5:0] == 9;
+wire load_rom1  = ioctl_index[5:0] == 8;
+wire load_rom2  = ioctl_index[5:0] == 7;
+wire load_rom4  = ioctl_index[5:0] == 6;
+wire load_rom6  = ioctl_index[5:0] == 5;
+wire load_rom8  = ioctl_index[5:0] == 4;
+wire load_romC  = ioctl_index[5:0] == 3;
+wire load_romE  = ioctl_index[5:0] == 2;
+
 wire       model = status[1];
-wire [1:0] copro = status[16:15];
+wire       profile = status[20];
+wire [1:0] copro = model & profile ? status[16:15] : 2'b00;
 wire [1:0] ramsize = status[3:2];
 wire       ntsc = status[4];
 
@@ -399,6 +439,8 @@ reg        io_cycle_we;
 reg [24:0] io_cycle_addr;
 reg  [7:0] io_cycle_data;
 
+reg  [8:0] rom_loaded = 0;
+
 always @(posedge clk_sys) begin
 	reg  [4:0] erase_to;
 	reg        io_cycleD;
@@ -413,16 +455,50 @@ always @(posedge clk_sys) begin
 			io_cycle_we <= 1;
 			io_cycle_addr <= ioctl_load_addr;
 			ioctl_load_addr <= ioctl_load_addr + 1'b1;
+
 			if (erasing)
-				io_cycle_data <= ioctl_load_addr[23:16] == 'h0F ? {8{ioctl_load_addr[6]}} : {8{ioctl_load_addr[14]^ioctl_load_addr[3]^ioctl_load_addr[2]}};
+				io_cycle_data <= &ioctl_load_addr[19:16] ? {8{ioctl_load_addr[6]}} : {8{ioctl_load_addr[14]^ioctl_load_addr[3]^ioctl_load_addr[2]}};
+			else begin
+				io_cycle_data <= ioctl_data;
+
+				if (|ioctl_data && ~&ioctl_data)
+					if (ioctl_load_addr[24:16] == 'h00F)
+						rom_loaded[ioctl_load_addr[15:13]] <= 1;
+					else if (ioctl_load_addr[24:16] == 'h010)
+						rom_loaded[8] <= 1;
+			end
 		end
 	end
 
 	if (io_cycle & ~io_cycleD) io_cycle_ce <= 0;
 
+	if (ioctl_wr) begin
+		if (ioctl_addr == 0) begin
+			if (load_rom1) ioctl_load_addr <= 25'h00F_1000;
+			if (load_rom2) ioctl_load_addr <= 25'h00F_2000;
+			if (load_rom4) ioctl_load_addr <= 25'h00F_4000;
+			if (load_rom6) ioctl_load_addr <= 25'h00F_6000;
+			if (load_rom8) ioctl_load_addr <= 25'h00F_8000;
+			if (load_romC) ioctl_load_addr <= 25'h00F_C000;
+			if (load_romE) ioctl_load_addr <= 25'h00F_E000;
+			if (load_char) ioctl_load_addr <= 25'h010_0000;
+
+			if (load_rom1 || load_rom2 || load_rom4 || load_rom6 || load_rom8 || load_romC || load_romE || load_char)
+				ioctl_req_wr <= 1;
+		end
+		else if (load_char) begin
+			if (ioctl_load_addr[24:12] == 'h010_0)
+				ioctl_req_wr <= 1;
+		end
+		else if (load_rom1 || load_rom2 || load_rom4 || load_rom6 || load_rom8 || load_romC || load_romE) begin
+			if (ioctl_load_addr[24:16] == 'h00F && ioctl_load_addr[15:12] != 'hD)
+				ioctl_req_wr <= 1;
+		end
+	end
+
 	if (!erasing && force_erase) begin
 		erasing <= 1;
-		ioctl_load_addr <= force_erase == 1 ? 'h0F_0000 : model && ramsize < 2 ? 'h01_0000 : 'h00_0000;
+		ioctl_load_addr <= force_erase == 1 ? 25'h0F_0000 : model && ramsize < 2 ? 25'h01_0000 : 25'h00_0000;
 	end
 
 	if (erasing && !ioctl_req_wr) begin
@@ -432,10 +508,10 @@ always @(posedge clk_sys) begin
 			   || (ramsize == 0 && model == 1 && ioctl_load_addr == 'h02_FFFF)
 			   || (ramsize == 1 && model == 0 && ioctl_load_addr == 'h03_FFFF)
 				|| (ramsize == 1 && model == 1 && ioctl_load_addr == 'h04_FFFF)) begin
-				ioctl_load_addr <= 'h0F_0000;
+				ioctl_load_addr <= 25'h0F_0000;
 			end
 			else if (ioctl_load_addr == 'h0F_0FFF) begin
-				ioctl_load_addr <= 'h0F_D000;
+				ioctl_load_addr <= 25'h0F_D000;
 			end
 
 			if (ioctl_load_addr < 'h0F_DFFF)
@@ -491,14 +567,19 @@ wire        refresh;
 wire [7:0]  r, g, b;
 wire        hsync, vsync;
 
+wire        soft_reset;
+
 cbm2_main main (
 	.CLK(CLK),
 
 	.model(model),
+	.profile(profile),
 	.ntsc(ntsc),
 	.turbo(status[5]),
 	.ramSize(ramsize),
 	.copro(copro),
+
+	.extrom(rom_loaded),
 
 	.pause(freeze),
 	.pause_out(pause),

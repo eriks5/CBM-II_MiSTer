@@ -1,15 +1,19 @@
 module cbm2_buslogic (
    input         model,     // 0=Professional, 1=Business
-   input [1:0]   ramSize,   // 0=128k, 1=256k, 2=1M, 3=16M
+   input  [1:0]  ramSize,   // 0=128k, 1=256k, 2=1M
    input         ipcEn,     // Enable IPC RAM (seg 15 $0FFF-$0800)
+   input  [8:0]  extrom,
 
    input         clk_sys,
    input         reset,
+
+   input         phase,
 
    input         cpuCycle,
    input  [15:0] cpuAddr,
    input  [7:0]  cpuSeg,
    output [7:0]  cpuDi,
+   input         cpuWe,
 
    input         vidCycle,
    input  [15:0] vidAddr,
@@ -17,9 +21,9 @@ module cbm2_buslogic (
 
    input         vicdotsel,
    input         statvid,
-   input         vicPhase,
 
-   output [23:0] systemAddr,
+   output [24:0] systemAddr,
+   output        systemWe,
 
    input  [7:0]  ramData,
 
@@ -52,7 +56,7 @@ wire [7:0]  rom_data = 0;
 wire        rom_wr = 0;
 
 wire [7:0] rom8Data;
-rom_mem #(8,14,"rtl/roms/PL/basic-901235+6-02.mif") rom_basic_p
+rom_mem #(8,14,"rtl/roms/P/basic.901235+6-02.mif") rom_basic_p
 (
    .clock_a(clk_sys),
    .address_a(rom_addr),
@@ -64,8 +68,8 @@ rom_mem #(8,14,"rtl/roms/PL/basic-901235+6-02.mif") rom_basic_p
    .q_b(rom8Data)
 );
 
-wire [7:0] romCData;
-rom_mem #(8,12,"rtl/roms/PL/characters.901225-01.mif") rom_char_p
+wire [7:0] romBCData;
+rom_mem #(8,12,"rtl/roms/B/characters.901232-01.mif") rom_char_b
 (
    .clock_a(clk_sys),
    .address_a(rom_addr),
@@ -74,11 +78,24 @@ rom_mem #(8,12,"rtl/roms/PL/characters.901225-01.mif") rom_char_p
 
    .clock_b(clk_sys),
    .address_b(systemAddr),
-   .q_b(romCData)
+   .q_b(romBCData)
+);
+
+wire [7:0] romPCData;
+rom_mem #(8,12,"rtl/roms/P/characters.901225-01.mif") rom_char_p
+(
+   .clock_a(clk_sys),
+   .address_a(rom_addr),
+   .data_a(rom_data),
+   .wren_a(rom_wr),
+
+   .clock_b(clk_sys),
+   .address_b(systemAddr),
+   .q_b(romPCData)
 );
 
 wire [7:0] romEData;
-rom_mem #(8,13,"rtl/roms/PL/kernal.901234-02.mif") rom_kernal_p
+rom_mem #(8,13,"rtl/roms/P/kernal.901234-02.mif") rom_kernal_p
 (
    .clock_a(clk_sys),
    .address_a(rom_addr),
@@ -158,7 +175,8 @@ end
 always @(*) begin
    // Decode RAM/ROM
 
-   systemAddr <= 24'h0;
+   systemAddr <= 0;
+   systemWe <= 0;
 
    cs_ram <= 0;
    cs_rom8 <= 0;
@@ -167,22 +185,28 @@ always @(*) begin
 
    // CPU or CoCPU
    if (cpuCycle) begin
-      systemAddr <= {cpuSeg, cpuAddr};
+      systemAddr[23:0] <= {cpuSeg, cpuAddr};
+      systemWe <= cpuWe & cpuCycle;
 
-      if (cpuSeg == 15) // Segment 15
+      if (cpuSeg == 15) begin
          case(cpuAddr[15:12])
-            4'h0: if (~cpuAddr[11] || ipcEn)    cs_ram  <= 1; // Buffer ram
-            4'h8, 4'h9, 4'hA, 4'hB:             cs_rom8 <= 1; // BASIC ROM
-            4'hC:                               cs_romC <= 1; // Character ROM (P2 only)
-            4'hD: case(cpuAddr[11:8])
-                     4'h0, 4'h1, 4'h2, 4'h3:    cs_ram  <= 1; // Video RAM
-                     4'h4, 4'h5, 4'h6, 4'h7:
-                                    if (!model) cs_ram  <= 1; // Video RAM (B2)
-                     default:                   ;
-                  endcase
-            4'hE, 4'hF:                         cs_romE <= 1; // Kernal
+            4'h0: if (!cpuAddr[11] || ipcEn) cs_ram <= 1;
+            4'h1: if (extrom[0])             cs_ram <= 1;
+            4'h2, 4'h3: if (extrom[1])       cs_ram <= 1;
+            4'h4, 4'h5: if (extrom[2])       cs_ram <= 1;
+            4'h6, 4'h7: if (extrom[3])       cs_ram <= 1;
+            4'h8, 4'h9: if (extrom[4])       cs_ram <= 1; else cs_rom8 <= 1;
+            4'hA, 4'hB: if (extrom[5])       cs_ram <= 1; else cs_rom8 <= 1;
+            4'hC: if (extrom[6])             cs_ram <= 1; else if (!model) cs_romC <= 1;
+            4'hD: if (!cpuAddr[11] || model) cs_ram <= 1;
+            4'hE, 4'hF: if (extrom[7])       cs_ram <= 1; else cs_romE <= 1;
             default: ;
          endcase
+
+         // prevent overwriting loaded ROMs
+         if (cpuAddr[15:12] != 0 && cpuAddr[15:12] != 4'hD)
+            systemWe <= 0;
+      end
       else
          case (ramSize)
             0      : cs_ram <= model == 0 ? (cpuSeg<=1) : (cpuSeg>=1 && cpuSeg<=2);   // 128k (Standard)
@@ -193,19 +217,35 @@ always @(*) begin
 
    // VIC
    if (vidCycle && !model) begin
-      if (vicdotsel && !vicPhase) begin
-         // Seg 15, $CFFF-$C000 (Character ROM)
-         systemAddr <= {12'h0FC, vidAddr[11:0]};
-         cs_romC <= 1;
+      if (vicdotsel && !phase) begin
+         // Character ROM
+         systemAddr[19:0] <= {8'hFC, vidAddr[11:0]};
+         if (extrom[6]) cs_ram <= 1;
+         else           cs_romC <= 1;
       end
       else if (statvid) begin
-         // Seg 15, $D3FF-$D000 (Video RAM)
-         systemAddr <= {12'h0FD, 2'b00, vidAddr[9:0]};
+         // Static video RAM
+         systemAddr[19:0] <= {8'hFD, 2'b00, vidAddr[9:0]};
          cs_ram <= 1;
       end
       else begin
          // Seg 0
-         systemAddr <= {8'h00, vidAddr};
+         systemAddr[15:0] <= vidAddr;
+         cs_ram <= 1;
+      end
+   end
+
+   // CRTC
+   if (vidCycle && model) begin
+      if (vidAddr[15]) begin
+         // Character ROM
+         systemAddr[20:0] <= {9'h100, vidAddr[11:0]};
+         if (extrom[8]) cs_ram <= 1;
+         else           cs_romC <= 1;
+      end
+      else begin
+         // Static video RAM
+         systemAddr[19:0] <= {8'hFD, 1'b0, vidAddr[10:0]};
          cs_ram <= 1;
       end
    end
@@ -232,13 +272,13 @@ always @(*) begin
       else if (cs_rom8) begin
          cpuDi <= rom8Data;
       end
-      else if (cs_romC) begin
-         cpuDi <= romCData;
+      else if (cs_romC && !model) begin
+         cpuDi <= romPCData;
       end
       else if (cs_romE) begin
          cpuDi <= romEData;
       end
-      else if (cs_colram) begin
+      else if (cs_colram && !model) begin
          cpuDi[3:0] <= colData;
       end
       else if (cs_vic) begin
@@ -268,7 +308,7 @@ always @(*) begin
          vidDi <= ramData;
       end
       else if (cs_romC) begin
-         vidDi <= romCData;
+         vidDi <= model ? romBCData : romPCData;
       end
 end
 

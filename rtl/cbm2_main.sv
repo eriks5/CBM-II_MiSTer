@@ -1,9 +1,12 @@
 module cbm2_main (
    input         model,     // 0=Professional, 1=Business
+   input         profile,   // 0=Low, 1=High (Business only)
    input         ntsc,      // 0=PAL, 1=NTSC
    input         turbo,     // 1=2MHz CPU clock (Professional only)
-   input  [1:0]  ramSize,   // 0=128k, 2=256k, 2=1M, 3=16M
+   input  [1:0]  ramSize,   // 0=128k, 2=256k, 2=1M
    input  [1:0]  copro,     // 0=none, 1=Z80, 2=8088 (Business only)
+
+   input  [8:0]  extrom,
 
    input         pause,
    output        pause_out,
@@ -71,13 +74,13 @@ wire enableCpu  = sysCycle == CYCLE_CPU3        && (phase || sys2MHz);
 wire enableCop  = sysCycle == CYCLE_COP3        && ipcEn;
 wire pulseWr_io = enableCpu && cpuWe;
 
-assign ramWE = cpuWe && cpu_cycle;
+// assign ramWE = cpuWe && cpu_cycle;
 assign ramCE = cs_ram && ( (sysCycle == CYCLE_CPU0 && (phase || sys2MHz))
                         || (sysCycle == CYCLE_COP0 && ipcEn)
                         ||  sysCycle == CYCLE_VID0
                         );
 
-assign ramAddr = {1'b0, systemAddr};
+assign ramAddr = systemAddr;
 assign ramOut = cpuDo;
 
 assign sysCycle = sysEnable ? preCycle : CYCLE_EXT0;
@@ -112,7 +115,7 @@ always @(posedge clk_sys) begin
    end
 end
 
-reg [23:0] systemAddr;
+reg [24:0] systemAddr;
 
 reg [15:0] cpuAddr;
 reg [7:0]  cpuPO;
@@ -127,7 +130,7 @@ reg [7:0]  cpuDo;
 wire irq_n = irq_tpi1 & irq_vic;
 
 cpu_6509 cpu (
-   .widePO(&ramSize),
+   .widePO(0 /*&ramSize*/),
    .clk(clk_sys),
    .enable(enableCpu),
    .reset(reset),
@@ -482,8 +485,8 @@ mos_tpi tpi1 (
 //   PC3 : KYBD IN 3
 //   PC4 : KYBD IN 4
 //   PC5 : KYBD IN 5
-//   PC6 : VIC 16K BANK SELECT LOW
-//   PC7 : VIC 16K BANK SELECT HI
+//   PC6 : VIC 16K BANK SELECT LOW OUT (P MODEL) / 50/60 Select IN (B MODEL)
+//   PC7 : VIC 16K BANK SELECT HI  OUT (P MODEL) / Low/High Profile Select IN (B MODEL)
 // ============================================================================
 
 reg  [7:0] tpi2Data;
@@ -511,7 +514,7 @@ mos_tpi tpi2 (
    .pb_in(tpi2_pbo),
    .pb_out(tpi2_pbo),
 
-   .pc_in({tpi2_pco[7:6], tpi2_pci}),
+   .pc_in({(~model | profile) & tpi2_pco[7], (~model | ntsc) & tpi2_pco[6], tpi2_pci}),
    .pc_out(tpi2_pco)
 );
 
@@ -552,14 +555,18 @@ cbm2_buslogic buslogic (
    .model(model),
    .ramSize(ramSize),
    .ipcEn(ipcEn),
+   .extrom(extrom),
 
    .clk_sys(clk_sys),
    .reset(reset),
+
+   .phase(phase),
 
    .cpuCycle(cpu_cycle || cop_cycle),
    .cpuAddr(cpuAddr),
    .cpuSeg(cpuPO),
    .cpuDi(cpuDi),
+   .cpuWe(cpuWe),
 
    .vidCycle(vid_cycle),
    .vidAddr({tpi2_pco[7:6], vicAddr}),
@@ -567,9 +574,9 @@ cbm2_buslogic buslogic (
 
    .vicdotsel(vicdotsel),
    .statvid(statvid),
-   .vicPhase(phase),
 
    .systemAddr(systemAddr),
+   .systemWe(ramWE),
 
    .ramData(ramData),
 
