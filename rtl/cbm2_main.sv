@@ -3,8 +3,8 @@ module cbm2_main (
    input         profile,   // 0=Low, 1=High (Business only)
    input         ntsc,      // 0=PAL, 1=NTSC
    input         turbo,     // 1=2MHz CPU clock (Professional only)
-   input  [1:0]  ramSize,   // 0=128k, 2=256k, 2=1M
-   input  [1:0]  copro,     // 0=none, 1=Z80, 2=8088 (Business only)
+   input  [1:0]  ramSize,   // 0=64k, 1=128k, 2=256k, 3=1M
+   input  [1:0]  copro,     // 0=none, 1=8088, 2=Z80
 
    input  [8:0]  extrom,
 
@@ -130,7 +130,7 @@ reg [7:0]  cpuDo;
 wire irq_n = irq_tpi1 & irq_vic;
 
 cpu_6509 cpu (
-   .widePO(0 /*&ramSize*/),
+   .widePO(0),
    .clk(clk_sys),
    .enable(enableCpu),
    .reset(reset),

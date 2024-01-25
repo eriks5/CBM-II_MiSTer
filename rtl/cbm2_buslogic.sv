@@ -1,7 +1,7 @@
 module cbm2_buslogic (
    input         model,     // 0=Professional, 1=Business
-   input  [1:0]  ramSize,   // 0=128k, 1=256k, 2=1M
-   input         ipcEn,     // Enable IPC RAM (seg 15 $0FFF-$0800)
+   input  [1:0]  ramSize,   // 0=256k, 1=128k, 2=64k, 3=1M
+   input         ipcEn,     // Enable IPC
    input  [8:0]  extrom,
 
    input         clk_sys,
@@ -209,9 +209,10 @@ always @(*) begin
       end
       else
          case (ramSize)
-            0      : cs_ram <= model == 0 ? (cpuSeg<=1) : (cpuSeg>=1 && cpuSeg<=2);   // 128k (Standard)
-            1      : cs_ram <= model == 0 ? (cpuSeg<=3) : (cpuSeg>=1 && cpuSeg<=4);   // 256k (Standard+Expansion)
-            default: cs_ram <= 1;                                                     // all segments
+            0: cs_ram <= model == 0 ? (cpuSeg<=3) : (cpuSeg>=1 && cpuSeg<=4);  // 256k
+            1: cs_ram <= model == 0 ? (cpuSeg<=1) : (cpuSeg>=1 && cpuSeg<=2);  // 128k
+            2: cs_ram <= model == 0 ? (cpuSeg==0) : (cpuSeg==1);               // 64k
+            3: cs_ram <= 1;                                                    // 1M
          endcase
    end
 

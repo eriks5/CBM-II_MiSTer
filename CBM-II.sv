@@ -196,41 +196,42 @@ assign VGA_SCALER = 0;
 // 0         1         2         3          4         5         6
 // 01234567890123456789012345678901 23456789012345678901234567890123
 // 0123456789ABCDEFGHIJKLMNOPQRSTUV 0123456789ABCDEFGHIJKLMNOPQRSTUV
-// XXXXXXXXXXXXXXXXXXXXX
+// XXXXXXXXXXXXXXXXXXXXXXXX
 
 `include "build_id.v"
 localparam CONF_STR = {
 	"CBM-II;;",
-	"-;",
-	"O[1],Model,Professional,Business;",
-	"H0O[5],CPU Clock,1 MHz,2 MHz;",
-	"h0O[20],Profile,Low,High;",
-	"h1O[16:15],Co-processor,None,Z80,8088;",
-	"O[3:2],RAM,128K,256K,1M;",
-	"-;",
-	"H0O[4],TV System,PAL,NTSC;",
-	"h0O[4],Mains freq.,50 Hz,60 Hz;",
-	"O[7:6],Aspect Ratio,Original,Full Screen,[ARC1],[ARC2];",
-	"O[10:8],Scandoubler Fx,None,HQ2x-320,HQ2x-160,CRT 25%,CRT 50%,CRT 75%;",
-	"d2O[11],Vertical Crop,No,Yes;",
-	"O[13:12],Scale,Normal,V-Integer,Narrower HV-Integer,Wider HV-Integer;",
-	"-;",
-  	"FC8,ROMBIN,Rom (External)      @ $1000 ;",
-  	"FC7,ROMBIN,Rom (External)      @ $2000 ;",
-  	"FC6,ROMBIN,Rom (External)      @ $4000 ;",
-  	"FC5,ROMBIN,Rom (External)      @ $6000 ;",
-  	"FC4,ROMBIN,Rom (Basic)         @ $8000 ;",
-	"H0FC3,ROMBIN,Rom (VIC Char)      @ $C000 ;",
-	"h0FC3,ROMBIN,Rom (External)      @ $C000 ;",
-   "FC2,ROMBIN,Rom (Kernal)        @ $E000 ;",
-   "h0FC9,ROMBIN,Rom (CRTC Char)            ;",
-	"-;",
-	"O[18],Release Keys on Reset,Yes,No;",
-	"O[17],Clear All RAM on Reset,Yes,No;",
-	"O[14],Pause When OSD is Open,No,Yes;",
+	"P1,Hardware;",
+	"P1O[4:2],Model,500,610,620,630,710,720,730,Custom;",
+	"h0P1-;H0H1P1-;",
+	"h0P1O[6:5],Case,Professional,Low Profile,High Profile;",
+	"h0P1O[8:7],Co-processor,None,8088,Z80;",
+	"h0P1O[10:9],RAM,256K,128K,64K,1M;",
+	"H1P1O[11],CPU Clock,1 MHz,2 MHz;",
+	"P1-;",
+	"P1FC8,ROMBIN,Load Rom $1000              ;",
+  	"P1FC7,ROMBIN,Load Rom $2000              ;",
+  	"P1FC6,ROMBIN,Load Rom $4000              ;",
+  	"P1FC5,ROMBIN,Load Rom $6000              ;",
+  	"P1FC4,ROMBIN,Load Rom $8000 (Basic)      ;",
+   "H1P1FC3,ROMBIN,Load Rom $C000 (VIC Char)   ;",
+   "h1P1FC3,ROMBIN,Load Rom $C000              ;",
+   "P1FC2,ROMBIN,Load Rom $E000 (Kernal)     ;",
+   "h1P1FC9,ROMBIN,Load CRTC Char ROM          ;",
+	"P1-;",
+	"P1O[13],Release Keys on Reset,Yes,No;",
+	"P1O[14],Clear All RAM on Reset,Yes,No;",
+	"P1O[15],Pause When OSD is Open,No,Yes;",
+   "P2,Audio & Video;",
+	"H2P2O[12],TV System,PAL,NTSC;",
+	"H2P2-;",
+	"P2O[17:16],Aspect Ratio,Original,Full Screen,[ARC1],[ARC2];",
+	"P2O[20:18],Scandoubler Fx,None,HQ2x-320,HQ2x-160,CRT 25%,CRT 50%,CRT 75%;",
+	"P2d3O[21],Vertical Crop,No,Yes;",
+	"P2O[23:22],Scale,Normal,V-Integer,Narrower HV-Integer,Wider HV-Integer;",
 	"-;",
  	"R[0],Hard reset;",
-	"R[19],Soft reset;",
+	"R[1],Soft reset;",
 	"v,0;",
 	"V,v",`BUILD_DATE
 };
@@ -328,29 +329,23 @@ reg reset_n;
 reg reset_wait = 0;
 always @(posedge clk_sys) begin
 	integer   reset_counter;
-	reg       model_r;
-	reg       profile_r;
-	reg [1:0] copro_r;
-	reg [1:0] ramsize_r;
+	reg [8:0] cfg_r;
 	reg [1:0] do_erase = 2'd2;  // 0 - no erase, 1 - erase segment 15 only, 2 - erase all segments
 
-	model_r <= model;
-	profile_r <= profile;
-	copro_r <= copro;
-	ramsize_r <= ramsize;
+	cfg_r <= status[10:2];
 
 	reset_n <= !reset_counter;
 
-	if (RESET || (model != model_r) || (profile != profile_r) || (copro != copro_r) || (ramsize != ramsize_r) || status[0] || status[19] || buttons[1] || soft_reset || !pll_locked) begin
+	if (RESET || (cfg_r != status[10:2]) || status[0] || status[1] || buttons[1] || soft_reset || !pll_locked) begin
 		if (RESET)
 			do_erase <= 2'd2;
-		else if ((status[0] || (model != model_r) || (profile != profile_r) || (copro != copro_r) || (ramsize != ramsize_r)) && do_erase < 2)
-			do_erase <= status[17] ? 2'd1 : 2'd2;
+		else if ((status[0] || (cfg_r != status[10:2])) && do_erase < 2)
+			do_erase <= status[14] ? 2'd1 : 2'd2;
 
 		reset_counter <= 100000;
 	end
 	else if (ioctl_download && (load_rom1 || load_rom2 || load_rom4 || load_rom6 || load_rom8 || (load_romC && model) || load_romE)) begin
-		do_erase <= status[17] ? 2'd1 : 2'd2;
+		do_erase <= status[14] ? 2'd1 : 2'd2;
 		reset_counter <= 255;
 	end
 	else if (erasing) force_erase <= 0;
@@ -388,9 +383,10 @@ hps_io #(.CONF_STR(CONF_STR)) hps_io
 
 	.status(status),
 	.status_menumask({
-		/* 2 */ |vcrop,
-		/* 1 */ model & profile,
-		/* 0 */ model
+		/* 3 */ |vcrop,
+		/* 2 */ cfg7x0,
+		/* 1 */ model,
+		/* 0 */ cfgcust
 	}),
 	.buttons(buttons),
 	.forced_scandoubler(forced_scandoubler),
@@ -417,11 +413,20 @@ wire load_rom8  = ioctl_index[5:0] == 4;
 wire load_romC  = ioctl_index[5:0] == 3;
 wire load_romE  = ioctl_index[5:0] == 2;
 
-wire       model = status[1];
-wire       profile = status[20];
-wire [1:0] copro = model & profile ? status[16:15] : 2'b00;
-wire [1:0] ramsize = status[3:2];
-wire       ntsc = status[4];
+wire       cfg500  = status[4:2] == 0;
+// wire    cfg6x0  = status[4:2] == 1 || status[4:2] == 2 || status[4:2] == 3;
+wire       cfg7x0  = status[4:2] == 4 || status[4:2] == 5 || status[4:2] == 6;
+wire       cfgx10  = status[4:2] == 1 || status[4:2] == 4;
+// wire    cfgx20  = status[4:2] == 2 || status[4:2] == 5;
+wire       cfgx30  = status[4:2] == 3 || status[4:2] == 6;
+wire       cfgcust = status[4:2] == 7;
+
+// System configuration
+wire       model   = cfgcust ? |status[6:5] : |status[4:2];            // 0=B, 1=P
+wire       profile = cfgcust ? status[6]    : status[4];               // 0=B/L, 1=H
+wire [1:0] copro   = cfgcust ? status[8:7]  : {1'b0, cfgx30};          // 0=None, 1=8088, 2=Z80
+wire [1:0] ramsize = cfgcust ? status[10:9] : {1'b0, cfg500|cfgx10};   // 0=256k, 1=128k, 2=64k, 3=1M
+wire       ntsc    = status[12] | cfg7x0;                              // 0=PAL/50, 1=NTSC/60
 
 // ========================================================================
 // I/O
@@ -498,16 +503,19 @@ always @(posedge clk_sys) begin
 
 	if (!erasing && force_erase) begin
 		erasing <= 1;
-		ioctl_load_addr <= force_erase == 1 ? 25'h0F_0000 : model && ramsize < 2 ? 25'h01_0000 : 25'h00_0000;
+		ioctl_load_addr <= force_erase == 1 ? 25'h0F_0000 : model && ramsize < 3 ? 25'h01_0000 : 25'h00_0000;
 	end
 
 	if (erasing && !ioctl_req_wr) begin
 		erase_to <= erase_to + 1'b1;
 		if (&erase_to) begin
-			if (  (ramsize == 0 && model == 0 && ioctl_load_addr == 'h01_FFFF)
-			   || (ramsize == 0 && model == 1 && ioctl_load_addr == 'h02_FFFF)
-			   || (ramsize == 1 && model == 0 && ioctl_load_addr == 'h03_FFFF)
-				|| (ramsize == 1 && model == 1 && ioctl_load_addr == 'h04_FFFF)) begin
+			if (  (ramsize == 2 && model == 0 && ioctl_load_addr == 'h00_FFFF) // 64k P
+			   || (ramsize == 2 && model == 1 && ioctl_load_addr == 'h01_FFFF) // 64k B
+			   || (ramsize == 1 && model == 0 && ioctl_load_addr == 'h01_FFFF) // 128k P
+			   || (ramsize == 1 && model == 1 && ioctl_load_addr == 'h02_FFFF) // 128k B
+			   || (ramsize == 0 && model == 0 && ioctl_load_addr == 'h03_FFFF) // 256k P
+				|| (ramsize == 0 && model == 1 && ioctl_load_addr == 'h04_FFFF) // 256k B
+			) begin
 				ioctl_load_addr <= 25'h0F_0000;
 			end
 			else if (ioctl_load_addr == 'h0F_0FFF) begin
@@ -575,7 +583,7 @@ cbm2_main main (
 	.model(model),
 	.profile(profile),
 	.ntsc(ntsc),
-	.turbo(status[5]),
+	.turbo(status[11]),
 	.ramSize(ramsize),
 	.copro(copro),
 
@@ -587,7 +595,7 @@ cbm2_main main (
 	.clk_sys(clk_sys),
 	.reset_n(reset_n),
 
-	.kbd_reset(~reset_n & ~status[18]),
+	.kbd_reset(~reset_n & ~status[13]),
 	.ps2_key(ps2_key),
 
 	.ramAddr(cpu_addr),
@@ -638,7 +646,7 @@ always @(posedge clk_sys) begin
 
 	old_vsync <= vsync_out;
 	if (!old_vsync && vsync_out) begin
-		hq2x160 <= (status[10:8] == 2);
+		hq2x160 <= (status[20:18] == 2);
 	end
 end
 
@@ -652,10 +660,10 @@ always @(posedge CLK_VIDEO) begin
 	ce_pix <= (~lores | ~hq2x160) && !div;
 end
 
-wire scandoubler = status[10:8] || forced_scandoubler;
+wire scandoubler = status[20:18] || forced_scandoubler;
 
 assign CLK_VIDEO = clk64;
-assign VGA_SL    = (status[10:8] > 2) ? status[9:8] - 2'd2 : 2'd0;
+assign VGA_SL    = (status[20:18] > 2) ? status[19:18] - 2'd2 : 2'd0;
 assign VGA_F1    = 0;
 
 reg [9:0] vcrop;
@@ -679,8 +687,8 @@ always @(posedge CLK_VIDEO) begin
 	end
 end
 
-wire [1:0] ar = status[7:6];
-wire vcrop_en = status[11];
+wire [1:0] ar = status[17:16];
+wire vcrop_en = status[21];
 wire vga_de;
 video_freak video_freak
 (
@@ -690,7 +698,7 @@ video_freak video_freak
 	.ARY((!ar) ? 12'd300 : 12'd0),
 	.CROP_SIZE(vcrop_en ? vcrop : 10'd0),
 	.CROP_OFF(0),
-	.SCALE(status[13:12])
+	.SCALE(status[23:22])
 );
 
 wire freeze_sync;
@@ -699,7 +707,7 @@ always @(posedge clk_sys) begin
 	reg old_sync;
 
 	old_sync <= freeze_sync;
-	if(old_sync ^ freeze_sync) freeze <= OSD_STATUS & status[14];
+	if(old_sync ^ freeze_sync) freeze <= OSD_STATUS & status[15];
 end
 
 assign HDMI_FREEZE = freeze;
@@ -708,7 +716,7 @@ video_mixer #(.GAMMA(1)) video_mixer
 (
 	.CLK_VIDEO(CLK_VIDEO),
 
-	.hq2x(~status[10] & (status[9] ^ status[8])),
+	.hq2x(~status[20] & (status[19] ^ status[18])),
 	.scandoubler(scandoubler),
 	.gamma_bus(gamma_bus),
 
