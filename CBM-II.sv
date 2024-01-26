@@ -202,9 +202,9 @@ assign VGA_SCALER = 0;
 localparam CONF_STR = {
 	"CBM-II;;",
 	"P1,Hardware;",
-	"P1O[4:2],Model,500,610,620,630,710,720,730,Custom;",
+	"P1O[4:2],System,500,610,620,630,710,720,730,Custom;",
 	"h0P1-;H0H1P1-;",
-	"h0P1O[6:5],Case,Professional,Low Profile,High Profile;",
+	"h0P1O[6:5],Model,Professional,Low Profile,High Profile;",
 	"h0P1O[8:7],Co-processor,None,8088,Z80;",
 	"h0P1O[10:9],RAM,256K,128K,64K,1M;",
 	"H1P1O[11],CPU Clock,1 MHz,2 MHz;",
