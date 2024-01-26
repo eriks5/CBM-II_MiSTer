@@ -202,22 +202,12 @@ assign VGA_SCALER = 0;
 localparam CONF_STR = {
 	"CBM-II;;",
 	"P1,Hardware;",
-	"P1O[4:2],System,500,610,620,630,710,720,730,Custom;",
+	"P1O[4:2],System,730,720,710,630,620,610,500,Custom;",
 	"h0P1-;H0H1P1-;",
-	"h0P1O[6:5],Model,Professional,Low Profile,High Profile;",
+	"h0P1O[6:5],Model,High Profile,Low Profile,Professional;",
 	"h0P1O[8:7],Co-processor,None,8088,Z80;",
 	"h0P1O[10:9],RAM,256K,128K,64K,1M;",
 	"H1P1O[11],CPU Clock,1 MHz,2 MHz;",
-	"P1-;",
-	"P1FC8,ROMBIN,Load Rom $1000              ;",
-  	"P1FC7,ROMBIN,Load Rom $2000              ;",
-  	"P1FC6,ROMBIN,Load Rom $4000              ;",
-  	"P1FC5,ROMBIN,Load Rom $6000              ;",
-  	"P1FC4,ROMBIN,Load Rom $8000 (Basic)      ;",
-   "H1P1FC3,ROMBIN,Load Rom $C000 (VIC Char)   ;",
-   "h1P1FC3,ROMBIN,Load Rom $C000              ;",
-   "P1FC2,ROMBIN,Load Rom $E000 (Kernal)     ;",
-   "h1P1FC9,ROMBIN,Load CRTC Char ROM          ;",
 	"P1-;",
 	"P1O[13],Release Keys on Reset,Yes,No;",
 	"P1O[14],Clear All RAM on Reset,Yes,No;",
@@ -229,6 +219,16 @@ localparam CONF_STR = {
 	"P2O[20:18],Scandoubler Fx,None,HQ2x-320,HQ2x-160,CRT 25%,CRT 50%,CRT 75%;",
 	"P2d3O[21],Vertical Crop,No,Yes;",
 	"P2O[23:22],Scale,Normal,V-Integer,Narrower HV-Integer,Wider HV-Integer;",
+	"P3,Loadable ROM;",
+	"P3FC8,ROMBIN,Load Rom $1000              ;",
+  	"P3FC7,ROMBIN,Load Rom $2000              ;",
+  	"P3FC6,ROMBIN,Load Rom $4000              ;",
+  	"P3FC5,ROMBIN,Load Rom $6000              ;",
+  	"P3FC4,ROMBIN,Load Rom $8000 (Basic)      ;",
+   "H1P3FC3,ROMBIN,Load Rom $C000 (VIC Char)   ;",
+   "h1P3FC3,ROMBIN,Load Rom $C000              ;",
+   "P3FC2,ROMBIN,Load Rom $E000 (Kernal)     ;",
+   "h1P3FC9,ROMBIN,Load CRTC Char ROM          ;",
 	"-;",
  	"R[0],Hard reset;",
 	"R[1],Soft reset;",
@@ -384,7 +384,7 @@ hps_io #(.CONF_STR(CONF_STR)) hps_io
 	.status(status),
 	.status_menumask({
 		/* 3 */ |vcrop,
-		/* 2 */ cfg7x0,
+		/* 2 */ model7x0,
 		/* 1 */ model,
 		/* 0 */ cfgcust
 	}),
@@ -413,20 +413,20 @@ wire load_rom8  = ioctl_index[5:0] == 4;
 wire load_romC  = ioctl_index[5:0] == 3;
 wire load_romE  = ioctl_index[5:0] == 2;
 
-wire       cfg500  = status[4:2] == 0;
-// wire    cfg6x0  = status[4:2] == 1 || status[4:2] == 2 || status[4:2] == 3;
-wire       cfg7x0  = status[4:2] == 4 || status[4:2] == 5 || status[4:2] == 6;
-wire       cfgx10  = status[4:2] == 1 || status[4:2] == 4;
-// wire    cfgx20  = status[4:2] == 2 || status[4:2] == 5;
-wire       cfgx30  = status[4:2] == 3 || status[4:2] == 6;
+wire       model500  = status[4:2] == 6;
+wire       model6x0  = status[4:2] == 3 || status[4:2] == 4 || status[4:2] == 5;
+wire       model7x0  = status[4:2] == 0 || status[4:2] == 1 || status[4:2] == 2;
+wire       modelx10  = status[4:2] == 2 || status[4:2] == 5;
+// wire    modelx20  = status[4:2] == 1 || status[4:2] == 4;
+wire       modelx30  = status[4:2] == 0 || status[4:2] == 3;
 wire       cfgcust = status[4:2] == 7;
 
 // System configuration
-wire       model   = cfgcust ? |status[6:5] : |status[4:2];            // 0=B, 1=P
-wire       profile = cfgcust ? status[6]    : status[4];               // 0=B/L, 1=H
-wire [1:0] copro   = cfgcust ? status[8:7]  : {1'b0, cfgx30};          // 0=None, 1=8088, 2=Z80
-wire [1:0] ramsize = cfgcust ? status[10:9] : {1'b0, cfg500|cfgx10};   // 0=256k, 1=128k, 2=64k, 3=1M
-wire       ntsc    = status[12] | cfg7x0;                              // 0=PAL/50, 1=NTSC/60
+wire       model   = cfgcust ? ~status[6]    : model6x0|model7x0;         // 0=P, 1=B
+wire       profile = cfgcust ? ~|status[6:5] : model7x0;                  // 0=P/L, 1=H
+wire [1:0] copro   = cfgcust ? status[8:7]   : {1'b0, modelx30};          // 0=None, 1=8088, 2=Z80
+wire [1:0] ramsize = cfgcust ? status[10:9]  : {1'b0, model500|modelx10}; // 0=256k, 1=128k, 2=64k, 3=1M
+wire       ntsc    = status[12] | model7x0;                               // 0=PAL/50, 1=NTSC/60
 
 // ========================================================================
 // I/O
