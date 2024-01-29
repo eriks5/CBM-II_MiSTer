@@ -117,12 +117,7 @@ end
 
 wire [4:0] intreq = ilr & ddrc[4:0];
 wire [4:0] actint = air[0] | air[1] | air[2] | air[3] | air[4] | air[5];
-wire [4:0] actmsk = actint[4] ? 5'b00000
-                  : actint[3] ? 5'b10000
-                  : actint[2] ? 5'b11000
-                  : actint[1] ? 5'b11100
-                  : actint[0] ? 5'b11110
-                  :             5'b11111;
+wire [4:0] actmsk = {~actint[4], ~actint[3] & actmsk[4], ~actint[2] & actmsk[3], ~actint[1] & actmsk[2], ~actint[0] & actmsk[1]};
 
 wire       irq = |air[0];
 

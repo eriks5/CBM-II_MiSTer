@@ -6,7 +6,7 @@ module cbm2_main (
    input  [1:0]  ramSize,   // 0=64k, 1=128k, 2=256k, 3=1M
    input  [1:0]  copro,     // 0=none, 1=8088, 2=Z80
 
-   input  [8:0]  extrom,
+   input  [7:0]  extrom,
 
    input         pause,
    output        pause_out,
@@ -40,45 +40,41 @@ module cbm2_main (
 typedef enum bit[4:0] {
 	CYCLE_EXT0, CYCLE_EXT1, CYCLE_EXT2, CYCLE_EXT3,
    CYCLE_CPU0, CYCLE_CPU1, CYCLE_CPU2, CYCLE_CPU3,
-   CYCLE_COP0, CYCLE_COP1, CYCLE_COP2, CYCLE_COP3,
+   CYCLE_CPU4, CYCLE_CPU5, CYCLE_CPU6, CYCLE_CPU7,
    CYCLE_VID0, CYCLE_VID1, CYCLE_VID2, CYCLE_VID3,
-   CYCLE_NOP0, CYCLE_NOP1
+   CYCLE_VID4, CYCLE_VID5
 } sysCycle_t;
 
 sysCycle_t PHASE_START = sysCycle_t.first();
-wire [5:0] PHASE_END   = model ? sysCycle_t.last() : CYCLE_VID3;
+wire [4:0] PHASE_END   = model ? sysCycle_t.last() : CYCLE_VID3;
 
 sysCycle_t sysCycle, preCycle;
 reg        reset = 0;
 reg        sysEnable;
 
 wire       sys2MHz = model | (turbo & ~(cs_vic | cs_sid));
-wire       ipcEn = model & ~|copro;
+wire       coproEn = model & |copro;
 
-// External cycle
-assign io_cycle = sysCycle >= CYCLE_EXT0 && sysCycle <= CYCLE_EXT3 && rfsh_cycle != 1;
+// IOCTL cycle
+assign io_cycle   = sysCycle >= CYCLE_EXT0 && sysCycle <= CYCLE_EXT3 && rfsh_cycle != 1 && (phase || !coproEn);
 
 // Video cycle (VIC or CRTC)
-wire vid_cycle  = sysCycle >= CYCLE_VID0 && sysCycle <= CYCLE_VID3;
+wire vid_cycle    = (sysCycle >= CYCLE_VID0 && sysCycle <= CYCLE_VID5);
 
 // CPU cycle
-wire cpu_cycle  = sysCycle >= CYCLE_CPU0 && sysCycle <= CYCLE_CPU3 && (phase || sys2MHz);
+wire cpu_cycle    = (sysCycle >= CYCLE_CPU0 && sysCycle <= CYCLE_CPU3 && (phase || sys2MHz))
+                 || (sysCycle >= CYCLE_CPU4 && sysCycle <= CYCLE_CPU7 && coproEn)
+                 || (sysCycle >= CYCLE_EXT0 && sysCycle <= CYCLE_EXT3 && coproEn && !phase);
 
-// CoCPU cycle
-wire cop_cycle  = sysCycle >= CYCLE_COP0 && sysCycle <= CYCLE_COP3 && (phase || sys2MHz);
-
-wire enableVid  = sysCycle == CYCLE_VID3;
+wire enableVic  = sysCycle == CYCLE_VID3;
+wire enableCrtc = sysCycle == CYCLE_VID0.prev();
 wire enableIO_n = sysCycle == CYCLE_CPU2        && (phase || sys2MHz);
 wire enableIO_p = sysCycle == CYCLE_CPU3.next() && (phase || sys2MHz);
 wire enableCpu  = sysCycle == CYCLE_CPU3        && (phase || sys2MHz);
-wire enableCop  = sysCycle == CYCLE_COP3        && ipcEn;
 wire pulseWr_io = enableCpu && cpuWe;
 
 // assign ramWE = cpuWe && cpu_cycle;
-assign ramCE = cs_ram && ( (sysCycle == CYCLE_CPU0 && (phase || sys2MHz))
-                        || (sysCycle == CYCLE_COP0 && ipcEn)
-                        ||  sysCycle == CYCLE_VID0
-                        );
+assign ramCE = cs_ram && !sysCycle[4] && !sysCycle[1:0] && (cpu_cycle || vid_cycle);
 
 assign ramAddr = systemAddr;
 assign ramOut = cpuDo;
@@ -149,29 +145,23 @@ cpu_6509 cpu (
 );
 
 // ============================================================================
-// VIC-II (P model)
+// VIC-II
 // ============================================================================
 
 reg        baLoc;
 reg        aec;
 reg        irq_vic;
 
-// reg [7:0]  vicBus;
-reg [13:0] vicAddr;
-reg [3:0]  colData;
-reg [7:0]  vicDi;
+reg [15:0] vicAddr;
+reg  [3:0] colData;
 
-reg [7:0]  vicData;
-reg [3:0]  vicColorIndex;
+reg  [7:0] vicData;
+reg  [3:0] vicColorIndex;
 
-// always @(posedge clk_sys) begin
-//    if (phase) begin
-//       vicBus <= (cpuWe && cs_vic) ? cpuDo : 8'hFF;
-//    end
-// end
+reg        vicHSync;
+reg        vicVSync;
 
-// wire [7:0] vicDiAec = aec ? vidDi : vicBus;
-// wire [3:0] colorDataAec = aec ? colData : vidDi[3:0];
+reg [7:0]  vicR, vicG, vicB;
 
 spram #(4,10) colorram (
    .clk(clk_sys),
@@ -190,7 +180,7 @@ video_vicii_656x #(
    .clk(clk_sys),
    .reset(reset | model),
    .enaPixel(&enablePixel & ~model),
-   .enaData(enableVid & ~model),
+   .enaData(enableVic & ~model),
    .phi(phase),
 
    .baSync(0),
@@ -210,25 +200,108 @@ video_vicii_656x #(
 
    .aRegisters(cpuAddr[5:0]),
    .diRegisters(cpuDo),
-   .di(vicDi),
+   .di(vidDi),
    .diColor(colData),
    .DO(vicData),
 
-   .vicAddr(vicAddr),
+   .vicAddr(vicAddr[13:0]),
    .addrValid(aec),
    .irq_n(irq_vic),
 
-   .hsync(hsync),
-   .vsync(vsync),
+   .hsync(vicHSync),
+   .vsync(vicVSync),
    .colorIndex(vicColorIndex)
 );
 
 fpga64_rgbcolor vic_colors (
    .index(vicColorIndex),
-   .r(r),
-   .g(g),
-   .b(b)
+   .r(vicR),
+   .g(vicG),
+   .b(vicB)
 );
+
+// ============================================================================
+// CRTC
+// ============================================================================
+
+reg  [7:0] crtcData;
+reg [13:0] crtcMa;
+reg  [4:0] crtcRa;
+
+reg        crtcVsync;
+reg        crtcHsync;
+reg        crtcDE;
+reg        crtcCursor;
+
+mc6845 crtc (
+   .CLOCK(clk_sys),
+   .CLKEN(enableCrtc),
+   .nRESET(~reset & model),
+
+   .ENABLE(enableIO_p),
+   .R_nW(~(cs_crtc & cpuWe)),
+   .RS(cpuAddr[0]),
+   .DI(cpuDo),
+   .DO(crtcData),
+
+   .VSYNC(crtcVsync),
+   .HSYNC(crtcHsync),
+   .DE(crtcDE),
+   .LPSTB(0),
+   .CURSOR(crtcCursor),
+
+   .MA(crtcMa),
+   .RA(crtcRa)
+);
+
+reg [7:0] crtcDotD;
+
+chargen chargen (
+   .clk_sys(clk_sys),
+
+   .profile(profile),
+   .dotA({crtcMa[12], crtcGraphics, vidDi[6:0], crtcRa[3:0]}),
+   .dotD(crtcDotD)
+);
+
+reg        crtcOut;
+
+always @(posedge clk_sys) begin
+   reg [7:0] dot;
+   reg       crtcRevid, crtcRevid_r;
+   reg       crtcDE_r;
+   reg       crtcCursor_r;
+
+   if (enablePixel[0]) begin
+      crtcOut      <= crtcCursor_r ^ (crtcDE_r & (crtcRevid_r ^ dot[7]));
+      dot          <= {dot[6:0], dot[0] & crtcGraphics};
+   end
+
+   if (sysCycle == CYCLE_VID3) begin
+      crtcRevid    <= vidDi[7] ^ crtcMa[13];
+   end
+
+   if (sysCycle == CYCLE_VID5) begin
+      dot          <= crtcDotD;
+      crtcRevid_r  <= crtcRevid;
+      crtcDE_r     <= crtcDE;
+      crtcCursor_r <= crtcCursor;
+   end
+end
+
+wire  [7:0] crtcR = crtcOut ? 8'h00 : 8'h00;
+wire  [7:0] crtcG = crtcOut ? 8'hf8 : 8'h00;
+wire  [7:0] crtcB = crtcOut ? 8'h00 : 8'h00;
+
+// ============================================================================
+// Video mux
+// ============================================================================
+
+assign r     = model ? crtcR     : vicR;
+assign g     = model ? crtcG     : vicG;
+assign b     = model ? crtcB     : vicB;
+assign hsync = model ? crtcHsync : vicHSync;
+assign vsync = model ? crtcVsync : vicVSync;
 
 // ============================================================================
 // SID
@@ -270,7 +343,7 @@ mos6526 ipcia (
    .clk(clk_sys),
    .phi2_p(enableIO_p),
    .phi2_n(enableIO_n),
-   .res_n(~reset & ipcEn),
+   .res_n(~reset & coproEn),
    .cs_n(~cs_ipcia),
    .rw(~cpuWe),
 
@@ -403,8 +476,8 @@ glb6551 acia (
 //   IRQ3: (OPT) 6526 INTER-PROCESSOR
 //   IRQ4: 6551
 //   *IRQ: 6566 (VIC) / USER DEVICES
-//   CB  : VIC DOT SELECT
-//   CA  : VIC MATRIX SELECT
+//   CB  : VIC DOT SELECT (P MODEL)
+//   CA  : VIC MATRIX SELECT (P MODEL) / GRAPHICS (B MODEL)
 // ============================================================================
 
 reg  [7:0] tpi1Data;
@@ -432,8 +505,9 @@ wire       nrfd_o = tpi1_pao[7];
 wire       dirctl = tpi1_pao[0];
 wire       talken = tpi1_pao[1];
 
-wire       irq_tpi1  = tpi1_pco[5];
-wire       statvid   = tpi1_pco[6];
+wire       irq_tpi1 = tpi1_pco[5];
+wire       statvid = tpi1_pco[6];
+wire       crtcGraphics = tpi1_pco[6];
 wire       vicdotsel = tpi1_pco[7];
 
 mos_tpi tpi1 (
@@ -496,6 +570,8 @@ wire [7:0] tpi2_pao;
 wire [7:0] tpi2_pbo;
 wire [7:0] tpi2_pco;
 
+assign vicAddr[15:14] = tpi2_pco[7:6];
+
 mos_tpi tpi2 (
    .mode(1),
 
@@ -540,21 +616,24 @@ cbm2_keyboard keyboard (
 // PLA, ROM and glue logic
 // ============================================================================
 
-reg        cs_ram;
-reg        cs_colram;
-reg        cs_vic;
-reg        cs_crtc;
-reg        cs_sid;
-reg        cs_ipcia;
-reg        cs_cia;
-reg        cs_acia;
-reg        cs_tpi1;
-reg        cs_tpi2;
+reg [7:0] vidDi;
+
+reg       cs_ram;
+reg       cs_colram;
+reg       cs_vic;
+reg       cs_crtc;
+reg       cs_sid;
+reg       cs_ipcia;
+reg       cs_cia;
+reg       cs_acia;
+reg       cs_tpi1;
+reg       cs_tpi2;
 
 cbm2_buslogic buslogic (
    .model(model),
+   .profile(profile),
    .ramSize(ramSize),
-   .ipcEn(ipcEn),
+   .ipcEn(coproEn),
    .extrom(extrom),
 
    .clk_sys(clk_sys),
@@ -562,15 +641,16 @@ cbm2_buslogic buslogic (
 
    .phase(phase),
 
-   .cpuCycle(cpu_cycle || cop_cycle),
+   .cpuCycle(cpu_cycle),
    .cpuAddr(cpuAddr),
    .cpuSeg(cpuPO),
    .cpuDi(cpuDi),
    .cpuWe(cpuWe),
 
    .vidCycle(vid_cycle),
-   .vidAddr({tpi2_pco[7:6], vicAddr}),
-   .vidDi(vicDi),
+   .vicAddr(vicAddr),
+   .crtcAddr(crtcMa),
+   .vidDi(vidDi),
 
    .vicdotsel(vicdotsel),
    .statvid(statvid),
@@ -593,7 +673,7 @@ cbm2_buslogic buslogic (
 
    .colData(colData),
    .vicData(vicData),
-   // .crtcData(crtcData),
+   .crtcData(crtcData),
    .sidData(sidData),
    .ipciaData(ipciaData),
    .ciaData(ciaData),

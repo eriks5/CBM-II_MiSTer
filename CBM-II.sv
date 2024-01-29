@@ -228,7 +228,6 @@ localparam CONF_STR = {
    "H1P3FC3,ROMBIN,Load Rom $C000 (VIC Char)   ;",
    "h1P3FC3,ROMBIN,Load Rom $C000              ;",
    "P3FC2,ROMBIN,Load Rom $E000 (Kernal)     ;",
-   "h1P3FC9,ROMBIN,Load CRTC Char ROM          ;",
 	"-;",
  	"R[0],Hard reset;",
 	"R[1],Soft reset;",
@@ -238,14 +237,14 @@ localparam CONF_STR = {
 
 wire pll_locked;
 wire clk_sys;
-wire clk64;
+wire clk_dbl;
 wire clk48;
 
 pll pll
 (
 	.refclk(CLK_50M),
 	.outclk_0(clk48),
-	.outclk_1(clk64),
+	.outclk_1(clk_dbl),
 	.outclk_2(clk_sys),
 	.reconfig_to_pll(reconfig_to_pll),
 	.reconfig_from_pll(reconfig_from_pll),
@@ -280,7 +279,7 @@ wire [31:0] CLK = model ? 36_000_000
 always @(posedge CLK_50M) begin
 	reg ntscd = 0, ntscd2 = 0;
 	reg modeld = 0, modeld2 = 0;
-	reg [2:0] state = 0;
+	reg [3:0] state = 0;
 	reg ntsc_r, model_r;
 
 	ntscd <= ntsc;
@@ -308,15 +307,20 @@ always @(posedge CLK_50M) begin
 				end
 			3: begin
 					cfg_address <= 5;
-					cfg_data <= model_r ? 'h80808 : 'h80909;
+					cfg_data <= model_r ? 'h40404 : 'h60504;
 					cfg_write <= 1;
 				end
 			5: begin
+					cfg_address <= 5;
+					cfg_data <= model_r ? 'h80808 : 'h80909;
+					cfg_write <= 1;
+				end
+			7: begin
 					cfg_address <= 7;
 					cfg_data <= model_r ? 2233382994 : (ntsc_r ? 3357876127 : 1503512573);
 					cfg_write <= 1;
 				end
-			7: begin
+			9: begin
 					cfg_address <= 2;
 					cfg_data <= 0;
 					cfg_write <= 1;
@@ -404,7 +408,6 @@ hps_io #(.CONF_STR(CONF_STR)) hps_io
 	.ioctl_wait(ioctl_req_wr|reset_wait)
 );
 
-wire load_char  = ioctl_index[5:0] == 9;
 wire load_rom1  = ioctl_index[5:0] == 8;
 wire load_rom2  = ioctl_index[5:0] == 7;
 wire load_rom4  = ioctl_index[5:0] == 6;
@@ -444,7 +447,7 @@ reg        io_cycle_we;
 reg [24:0] io_cycle_addr;
 reg  [7:0] io_cycle_data;
 
-reg  [8:0] rom_loaded = 0;
+reg  [7:0] rom_loaded = 0;
 
 always @(posedge clk_sys) begin
 	reg  [4:0] erase_to;
@@ -466,11 +469,8 @@ always @(posedge clk_sys) begin
 			else begin
 				io_cycle_data <= ioctl_data;
 
-				if (|ioctl_data && ~&ioctl_data)
-					if (ioctl_load_addr[24:16] == 'h00F)
-						rom_loaded[ioctl_load_addr[15:13]] <= 1;
-					else if (ioctl_load_addr[24:16] == 'h010)
-						rom_loaded[8] <= 1;
+				if (|ioctl_data && ~&ioctl_data && ioctl_load_addr[24:16] == 'h00F)
+					rom_loaded[ioctl_load_addr[15:13]] <= 1;
 			end
 		end
 	end
@@ -486,13 +486,8 @@ always @(posedge clk_sys) begin
 			if (load_rom8) ioctl_load_addr <= 25'h00F_8000;
 			if (load_romC) ioctl_load_addr <= 25'h00F_C000;
 			if (load_romE) ioctl_load_addr <= 25'h00F_E000;
-			if (load_char) ioctl_load_addr <= 25'h010_0000;
 
-			if (load_rom1 || load_rom2 || load_rom4 || load_rom6 || load_rom8 || load_romC || load_romE || load_char)
-				ioctl_req_wr <= 1;
-		end
-		else if (load_char) begin
-			if (ioctl_load_addr[24:12] == 'h010_0)
+			if (load_rom1 || load_rom2 || load_rom4 || load_rom6 || load_rom8 || load_romC || load_romE)
 				ioctl_req_wr <= 1;
 		end
 		else if (load_rom1 || load_rom2 || load_rom4 || load_rom6 || load_rom8 || load_romC || load_romE) begin
@@ -550,7 +545,7 @@ sdram sdram
 	.sd_clk(SDRAM_CLK),
 	.sd_dqm({SDRAM_DQMH,SDRAM_DQML}),
 
-	.clk(clk64),
+	.clk(clk_dbl),
 	.init(~pll_locked),
 	.refresh(refresh),
 	.addr(io_cycle ? io_cycle_addr : cpu_addr),
@@ -629,11 +624,14 @@ wire vsync_out;
 video_sync sync
 (
 	.clk32(clk_sys),
+	.video_out(~model),
+	.bypass(0),
 	.pause(pause),
+	.wide(wide),
+
 	.hsync(hsync),
 	.vsync(vsync),
-	.ntsc(ntsc),
-	.wide(wide),
+
 	.hsync_out(hsync_out),
 	.vsync_out(vsync_out),
 	.hblank(hblank),
@@ -641,28 +639,43 @@ video_sync sync
 );
 
 reg hq2x160;
+reg hq2x320;
 always @(posedge clk_sys) begin
-	reg old_vsync;
+   reg old_vsync;
 
-	old_vsync <= vsync_out;
-	if (!old_vsync && vsync_out) begin
-		hq2x160 <= (status[20:18] == 2);
-	end
+   old_vsync <= vsync_out;
+   if (!old_vsync && vsync_out) begin
+      hq2x320 <= (status[20:8] == 1);
+      hq2x160 <= (status[20:8] == 2);
+   end
 end
 
 reg ce_pix;
 always @(posedge CLK_VIDEO) begin
-	reg [2:0] div;
-	reg       lores;
+   reg       model_r;
+   reg [1:0] div;
+   reg [1:0] lores;
 
-	div <= div + 1'b1;
-	if(&div) lores <= ~lores;
-	ce_pix <= (~lores | ~hq2x160) && !div;
+   model_r <= model;
+   if (model != model_r) begin
+      div <= 0;
+      lores <= 0;
+      ce_pix <= 0;
+   end
+   else if (model) begin
+      div <= div + 1'd1;
+      ce_pix <= !div[0];
+   end
+   else begin
+      div <= div + 1'd1;
+      if (&div) lores <= lores + 1'd1;
+      ce_pix <= (~|lores | ~hq2x160) && (~lores[0] | ~hq2x320) && !div;
+   end
 end
 
 wire scandoubler = status[20:18] || forced_scandoubler;
 
-assign CLK_VIDEO = clk64;
+assign CLK_VIDEO = clk_dbl;
 assign VGA_SL    = (status[20:18] > 2) ? status[19:18] - 2'd2 : 2'd0;
 assign VGA_F1    = 0;
 

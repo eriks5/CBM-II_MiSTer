@@ -1,8 +1,9 @@
 module cbm2_buslogic (
    input         model,     // 0=Professional, 1=Business
-   input  [1:0]  ramSize,   // 0=256k, 1=128k, 2=64k, 3=1M
+   input         profile,   // 0=Low, 1=High
+   input   [1:0] ramSize,   // 0=256k, 1=128k, 2=64k, 3=1M
    input         ipcEn,     // Enable IPC
-   input  [8:0]  extrom,
+   input   [7:0] extrom,
 
    input         clk_sys,
    input         reset,
@@ -11,13 +12,14 @@ module cbm2_buslogic (
 
    input         cpuCycle,
    input  [15:0] cpuAddr,
-   input  [7:0]  cpuSeg,
-   output [7:0]  cpuDi,
+   input   [7:0] cpuSeg,
+   output  [7:0] cpuDi,
    input         cpuWe,
 
    input         vidCycle,
-   input  [15:0] vidAddr,
-   output [7:0]  vidDi,
+   input  [15:0] vicAddr,
+   input  [10:0] crtcAddr,
+   output  [7:0] vidDi,
 
    input         vicdotsel,
    input         statvid,
@@ -25,7 +27,7 @@ module cbm2_buslogic (
    output [24:0] systemAddr,
    output        systemWe,
 
-   input  [7:0]  ramData,
+   input   [7:0] ramData,
 
    output        cs_ram,
    output        cs_colram,
@@ -51,60 +53,44 @@ module cbm2_buslogic (
 
 reg         cs_rom8, cs_romC, cs_romE;
 
-wire [11:0] rom_addr = 0;
-wire [7:0]  rom_data = 0;
-wire        rom_wr = 0;
-
-wire [7:0] rom8Data;
-rom_mem #(8,14,"rtl/roms/P/basic.901235+6-02.mif") rom_basic_p
+wire [7:0] romP8Data;
+rom_mem #(8,14,"rtl/roms/basic.901235+6-02.mif") rom_basic_p
 (
-   .clock_a(clk_sys),
-   .address_a(rom_addr),
-   .data_a(rom_data),
-   .wren_a(rom_wr),
-
-   .clock_b(clk_sys),
-   .address_b(systemAddr),
-   .q_b(rom8Data)
+   .clock(clk_sys),
+   .address(systemAddr),
+   .q(romP8Data)
 );
 
-wire [7:0] romBCData;
-rom_mem #(8,12,"rtl/roms/B/characters.901232-01.mif") rom_char_b
+wire [7:0] romB8Data;
+rom_mem #(8,14,"rtl/roms/basic.901242+3-04a.mif") rom_basic_b
 (
-   .clock_a(clk_sys),
-   .address_a(rom_addr),
-   .data_a(rom_data),
-   .wren_a(rom_wr),
-
-   .clock_b(clk_sys),
-   .address_b(systemAddr),
-   .q_b(romBCData)
+   .clock(clk_sys),
+   .address(systemAddr),
+   .q(romB8Data)
 );
 
 wire [7:0] romPCData;
-rom_mem #(8,12,"rtl/roms/P/characters.901225-01.mif") rom_char_p
+rom_mem #(8,12,"rtl/roms/characters.901225-01.mif") rom_char_p
 (
-   .clock_a(clk_sys),
-   .address_a(rom_addr),
-   .data_a(rom_data),
-   .wren_a(rom_wr),
-
-   .clock_b(clk_sys),
-   .address_b(systemAddr),
-   .q_b(romPCData)
+   .clock(clk_sys),
+   .address(systemAddr),
+   .q(romPCData)
 );
 
-wire [7:0] romEData;
-rom_mem #(8,13,"rtl/roms/P/kernal.901234-02.mif") rom_kernal_p
+wire [7:0] romPEData;
+rom_mem #(8,13,"rtl/roms/kernal.901234-02.mif") rom_kernal_p
 (
-   .clock_a(clk_sys),
-   .address_a(rom_addr),
-   .data_a(rom_data),
-   .wren_a(rom_wr),
+   .clock(clk_sys),
+   .address(systemAddr),
+   .q(romPEData)
+);
 
-   .clock_b(clk_sys),
-   .address_b(systemAddr),
-   .q_b(romEData)
+wire [7:0] romBEData;
+rom_mem #(8,13,"rtl/roms/kernal.901244-04a.mif") rom_kernal_b
+(
+   .clock(clk_sys),
+   .address(systemAddr),
+   .q(romBEData)
 );
 
 // From KERNAL_CBM2_1983-07-07/declare:
@@ -198,7 +184,7 @@ always @(*) begin
             4'h8, 4'h9: if (extrom[4])       cs_ram <= 1; else cs_rom8 <= 1;
             4'hA, 4'hB: if (extrom[5])       cs_ram <= 1; else cs_rom8 <= 1;
             4'hC: if (extrom[6])             cs_ram <= 1; else if (!model) cs_romC <= 1;
-            4'hD: if (!cpuAddr[11] || model) cs_ram <= 1;
+            4'hD: if (!cpuAddr[11] && (!cpuAddr[10] || model)) cs_ram <= 1;
             4'hE, 4'hF: if (extrom[7])       cs_ram <= 1; else cs_romE <= 1;
             default: ;
          endcase
@@ -219,36 +205,28 @@ always @(*) begin
    // VIC
    if (vidCycle && !model) begin
       if (vicdotsel && !phase) begin
-         // Character ROM
-         systemAddr[19:0] <= {8'hFC, vidAddr[11:0]};
+         // Character ROM, Seg 15 $CFFF-$C000
+         systemAddr[19:0] <= {8'hFC, vicAddr[11:0]};
          if (extrom[6]) cs_ram <= 1;
          else           cs_romC <= 1;
       end
-      else if (statvid) begin
-         // Static video RAM
-         systemAddr[19:0] <= {8'hFD, 2'b00, vidAddr[9:0]};
+      else if (statvid && phase) begin
+         // 4k Static video RAM, Seg 15 $D3FF-$D000
+         systemAddr[19:0] <= {8'hFD, 2'b00, vicAddr[9:0]};
          cs_ram <= 1;
       end
       else begin
          // Seg 0
-         systemAddr[15:0] <= vidAddr;
+         systemAddr[15:0] <= vicAddr;
          cs_ram <= 1;
       end
    end
 
    // CRTC
    if (vidCycle && model) begin
-      if (vidAddr[15]) begin
-         // Character ROM
-         systemAddr[20:0] <= {9'h100, vidAddr[11:0]};
-         if (extrom[8]) cs_ram <= 1;
-         else           cs_romC <= 1;
-      end
-      else begin
-         // Static video RAM
-         systemAddr[19:0] <= {8'hFD, 1'b0, vidAddr[10:0]};
-         cs_ram <= 1;
-      end
+      // 8k Static video RAM, Seg 15 $D7FF-$D000
+      systemAddr[19:0] <= {8'hFD, 1'b0, crtcAddr};
+      cs_ram <= 1;
    end
 end
 
@@ -267,50 +245,38 @@ always @(*) begin
    vidDi <= lastVidDi;
 
    if (cpuCycle)
-      if (cs_ram) begin
+      if (cs_ram)
          cpuDi <= ramData;
-      end
-      else if (cs_rom8) begin
-         cpuDi <= rom8Data;
-      end
-      else if (cs_romC && !model) begin
+      else if (cs_rom8)
+         cpuDi <= model ? romB8Data : romP8Data;
+      else if (cs_romC && !model)
          cpuDi <= romPCData;
-      end
-      else if (cs_romE) begin
-         cpuDi <= romEData;
-      end
-      else if (cs_colram && !model) begin
+      else if (cs_romE)
+         cpuDi <= model ? romBEData : romPEData;
+      else if (cs_colram && !model)
          cpuDi[3:0] <= colData;
-      end
-      else if (cs_vic) begin
+      else if (cs_vic)
          cpuDi <= vicData;
-      end
-      else if (cs_sid) begin
+      else if (cs_crtc)
+         cpuDi <= crtcData;
+      else if (cs_sid)
          cpuDi <= sidData;
-      end
-      else if (cs_ipcia) begin
+      else if (cs_ipcia)
          cpuDi <= ipciaData;
-      end
-      else if (cs_cia) begin
+      else if (cs_cia)
          cpuDi <= ciaData;
-      end
-      else if (cs_acia) begin
+      else if (cs_acia)
          cpuDi <= aciaData;
-      end
-      else if (cs_tpi1) begin
+      else if (cs_tpi1)
          cpuDi <= tpi1Data;
-      end
-      else if (cs_tpi2) begin
+      else if (cs_tpi2)
          cpuDi <= tpi2Data;
-      end
 
    if (vidCycle)
-      if (cs_ram) begin
+      if (cs_ram)
          vidDi <= ramData;
-      end
-      else if (cs_romC) begin
-         vidDi <= model ? romBCData : romPCData;
-      end
+      else if (cs_romC)
+         vidDi <= romPCData;
 end
 
 endmodule
