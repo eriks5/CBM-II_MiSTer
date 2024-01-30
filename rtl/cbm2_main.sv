@@ -3,10 +3,11 @@ module cbm2_main (
    input         profile,   // 0=Low, 1=High (Business only)
    input         ntsc,      // 0=PAL, 1=NTSC
    input         turbo,     // 1=2MHz CPU clock (Professional only)
-   input  [1:0]  ramSize,   // 0=64k, 1=128k, 2=256k, 3=1M
-   input  [1:0]  copro,     // 0=none, 1=8088, 2=Z80
+   input  [1:0]  ramSize,   // 0=64k, 1=128k, 2=1M
+   input  [1:0]  copro,     // 0=none, 1=8088
 
    input  [7:0]  extrom,
+   input         extram,
 
    input         pause,
    output        pause_out,
@@ -34,6 +35,7 @@ module cbm2_main (
    output [7:0]  b,
 
    output        sftlk_sense,
+   output        hard_reset,
    output        soft_reset
 );
 
@@ -608,6 +610,7 @@ cbm2_keyboard keyboard (
    .pci(tpi2_pco[5:0]),
    .pco(tpi2_pci[5:0]),
 
+   .hard_reset(hard_reset),
    .soft_reset(soft_reset),
    .sftlk_sense(sftlk_sense)
 );
@@ -635,6 +638,7 @@ cbm2_buslogic buslogic (
    .ramSize(ramSize),
    .ipcEn(coproEn),
    .extrom(extrom),
+   .extram(extram),
 
    .clk_sys(clk_sys),
    .reset(reset),

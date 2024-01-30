@@ -196,7 +196,7 @@ assign VGA_SCALER = 0;
 // 0         1         2         3          4         5         6
 // 01234567890123456789012345678901 23456789012345678901234567890123
 // 0123456789ABCDEFGHIJKLMNOPQRSTUV 0123456789ABCDEFGHIJKLMNOPQRSTUV
-// XXXXXXXXXXXXXXXXXXXXXXXX
+// XXXXXXXXXXXXXXXXXXXXXXXXX
 
 `include "build_id.v"
 localparam CONF_STR = {
@@ -205,9 +205,11 @@ localparam CONF_STR = {
 	"P1O[4:2],System,730,720,710,630,620,610,500,Custom;",
 	"h0P1-;H0H1P1-;",
 	"h0P1O[6:5],Model,High Profile,Low Profile,Professional;",
-	"h0P1O[8:7],Co-processor,None,8088,Z80;",
-	"h0P1O[10:9],RAM,256K,128K,64K,1M;",
+	"h0P1O[8:7],Co-processor,None,8088;",
+	"h0P1O[10:9],RAM,256K,128K,1M;",
 	"H1P1O[11],CPU Clock,1 MHz,2 MHz;",
+	"P1-;",
+	"P1O[24],Extra RAM Segment 15,Off,On;",
 	"P1-;",
 	"P1O[13],Release Keys on Reset,Yes,No;",
 	"P1O[14],Clear All RAM on Reset,Yes,No;",
@@ -334,20 +336,24 @@ reg reset_wait = 0;
 always @(posedge clk_sys) begin
 	integer   reset_counter;
 	reg [8:0] cfg_r;
+	reg       ntsc_r;
 	reg [1:0] do_erase = 2'd2;  // 0 - no erase, 1 - erase segment 15 only, 2 - erase all segments
 
 	cfg_r <= status[10:2];
+	ntsc_r <= ntsc;
 
 	reset_n <= !reset_counter;
 
-	if (RESET || (cfg_r != status[10:2]) || status[0] || status[1] || buttons[1] || soft_reset || !pll_locked) begin
+	if (RESET || (cfg_r != status[10:2]) || status[0] || hard_reset || !pll_locked) begin
 		if (RESET)
 			do_erase <= 2'd2;
-		else if ((status[0] || (cfg_r != status[10:2])) && do_erase < 2)
+		else if (do_erase < 2)
 			do_erase <= status[14] ? 2'd1 : 2'd2;
 
 		reset_counter <= 100000;
 	end
+	else if (ntsc_r != ntsc || status[1] || buttons[1] || soft_reset)
+		reset_counter <= 255;
 	else if (ioctl_download && (load_rom1 || load_rom2 || load_rom4 || load_rom6 || load_rom8 || (load_romC && model) || load_romE)) begin
 		do_erase <= status[14] ? 2'd1 : 2'd2;
 		reset_counter <= 255;
@@ -416,27 +422,26 @@ wire load_rom8  = ioctl_index[5:0] == 4;
 wire load_romC  = ioctl_index[5:0] == 3;
 wire load_romE  = ioctl_index[5:0] == 2;
 
-wire       model500  = status[4:2] == 6;
-wire       model6x0  = status[4:2] == 3 || status[4:2] == 4 || status[4:2] == 5;
-wire       model7x0  = status[4:2] == 0 || status[4:2] == 1 || status[4:2] == 2;
-wire       modelx10  = status[4:2] == 2 || status[4:2] == 5;
-// wire    modelx20  = status[4:2] == 1 || status[4:2] == 4;
-wire       modelx30  = status[4:2] == 0 || status[4:2] == 3;
-wire       cfgcust = status[4:2] == 7;
+wire       model500 = status[4:2] == 6;
+wire       model6x0 = status[4:2] == 3 || status[4:2] == 4 || status[4:2] == 5;
+wire       model7x0 = status[4:2] == 0 || status[4:2] == 1 || status[4:2] == 2;
+wire       modelx10 = status[4:2] == 2 || status[4:2] == 5;
+// wire    modelx20 = status[4:2] == 1 || status[4:2] == 4;
+wire       modelx30 = status[4:2] == 0 || status[4:2] == 3;
+wire       cfgcust  = status[4:2] == 7;
 
 // System configuration
 wire       model   = cfgcust ? ~status[6]    : model6x0|model7x0;         // 0=P, 1=B
 wire       profile = cfgcust ? ~|status[6:5] : model7x0;                  // 0=P/L, 1=H
-wire [1:0] copro   = cfgcust ? status[8:7]   : {1'b0, modelx30};          // 0=None, 1=8088, 2=Z80
-wire [1:0] ramsize = cfgcust ? status[10:9]  : {1'b0, model500|modelx10}; // 0=256k, 1=128k, 2=64k, 3=1M
+wire [1:0] copro   = cfgcust ? status[8:7]   : {1'b0, modelx30};          // 0=None, 1=8088, 2/3=reserved
+wire [1:0] ramsize = cfgcust ? status[10:9]  : {1'b0, model500|modelx10}; // 0=256k, 1=128k, 2=1M
 wire       ntsc    = status[12] | model7x0;                               // 0=PAL/50, 1=NTSC/60
 
 // ========================================================================
 // I/O
 // ========================================================================
 
-reg [1:0]  force_erase;  // 1 - erase segment 15, 2 - erase all segments
-reg        erasing;
+reg [1:0]  erasing, force_erase;  // 1 - erase segment 15 bank 0, 2 - erase all RAM
 
 reg [24:0] ioctl_load_addr;
 reg        ioctl_req_wr;
@@ -497,27 +502,35 @@ always @(posedge clk_sys) begin
 	end
 
 	if (!erasing && force_erase) begin
-		erasing <= 1;
-		ioctl_load_addr <= force_erase == 1 ? 25'h0F_0000 : model && ramsize < 3 ? 25'h01_0000 : 25'h00_0000;
+		erasing <= force_erase;
+		ioctl_load_addr <= force_erase == 1 ? 25'h0F_0000 : model ? 25'h01_0000 : 25'h00_0000;
 	end
 
 	if (erasing && !ioctl_req_wr) begin
 		erase_to <= erase_to + 1'b1;
 		if (&erase_to) begin
-			if (  (ramsize == 2 && model == 0 && ioctl_load_addr == 'h00_FFFF) // 64k P
-			   || (ramsize == 2 && model == 1 && ioctl_load_addr == 'h01_FFFF) // 64k B
-			   || (ramsize == 1 && model == 0 && ioctl_load_addr == 'h01_FFFF) // 128k P
-			   || (ramsize == 1 && model == 1 && ioctl_load_addr == 'h02_FFFF) // 128k B
-			   || (ramsize == 0 && model == 0 && ioctl_load_addr == 'h03_FFFF) // 256k P
-				|| (ramsize == 0 && model == 1 && ioctl_load_addr == 'h04_FFFF) // 256k B
-			) begin
-				ioctl_load_addr <= 25'h0F_0000;
-			end
-			else if (ioctl_load_addr == 'h0F_0FFF) begin
-				ioctl_load_addr <= 25'h0F_D000;
-			end
+			if ((ramsize == 1 && model == 0 && ioctl_load_addr == 'h01_FFFF) // 128k P
+		     ||(ramsize == 1 && model == 1 && ioctl_load_addr == 'h02_FFFF) // 128k B
+			  ||(ramsize == 0 && model == 0 && ioctl_load_addr == 'h03_FFFF) // 256k P
+			  ||(ramsize == 0 && model == 1 && ioctl_load_addr == 'h04_FFFF) // 256k B
+			)
+				ioctl_load_addr <= 'h0F_0000;
 
-			if (ioctl_load_addr < 'h0F_DFFF)
+			if (ioctl_load_addr == 'h0F_0FFF && erasing == 1)
+				erasing <= 0;
+			else if (ioctl_load_addr[24:12] == 'b0_1111_0001 && rom_loaded[0]) // F1000 .. F1FFF
+				ioctl_load_addr <= 25'h0F_2000;
+			else if (ioctl_load_addr[24:13] == 'b0_1111_001  && rom_loaded[1]) // F2000 .. F3FFF
+				ioctl_load_addr <= 25'h0F_4000;
+			else if (ioctl_load_addr[24:13] == 'b0_1111_010  && rom_loaded[2]) // F4000 .. F5FFF
+				ioctl_load_addr <= 25'h0F_6000;
+			else if (ioctl_load_addr[24:13] == 'b0_1111_011  && rom_loaded[3]) // F6000 .. F7FFF
+				ioctl_load_addr <= 25'h0F_C000;
+			else if (ioctl_load_addr[24:14] == 'b0_1111_10)                    // F8000 .. FBFFF
+				ioctl_load_addr <= 25'h0F_C000;
+			else if (ioctl_load_addr[24:12] == 'b0_1111_1100 && rom_loaded[5]) // FC000 .. FCFFF
+				ioctl_load_addr <= 25'h0F_D000;
+			else if (ioctl_load_addr < 'h0F_D7FF)
 				ioctl_req_wr <= 1;
 			else
 				erasing <= 0;
@@ -570,6 +583,7 @@ wire        refresh;
 wire [7:0]  r, g, b;
 wire        hsync, vsync;
 
+wire        hard_reset;
 wire        soft_reset;
 
 cbm2_main main (
@@ -583,6 +597,7 @@ cbm2_main main (
 	.copro(copro),
 
 	.extrom(rom_loaded),
+	.extram(status[24]),
 
 	.pause(freeze),
 	.pause_out(pause),
@@ -609,6 +624,7 @@ cbm2_main main (
 	.b(b),
 
 	.sftlk_sense(sftlk_sense),
+	.hard_reset(hard_reset),
 	.soft_reset(soft_reset)
 );
 

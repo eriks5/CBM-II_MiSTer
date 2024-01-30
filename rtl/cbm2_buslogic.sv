@@ -1,9 +1,10 @@
 module cbm2_buslogic (
    input         model,     // 0=Professional, 1=Business
    input         profile,   // 0=Low, 1=High
-   input   [1:0] ramSize,   // 0=256k, 1=128k, 2=64k, 3=1M
+   input   [1:0] ramSize,   // 0=256k, 1=128k, 2=1M
    input         ipcEn,     // Enable IPC
    input   [7:0] extrom,
+   input         extram,
 
    input         clk_sys,
    input         reset,
@@ -53,44 +54,52 @@ module cbm2_buslogic (
 
 reg         cs_rom8, cs_romC, cs_romE;
 
-wire [7:0] romP8Data;
-rom_mem #(8,14,"rtl/roms/basic.901235+6-02.mif") rom_basic_p
+wire [7:0] romLPData;
+rom_mem #(8,14,"rtl/roms/basic.901235+6-02.mif") rom_lang_p
 (
    .clock(clk_sys),
    .address(systemAddr),
-   .q(romP8Data)
+   .q(romLPData)
 );
 
-wire [7:0] romB8Data;
-rom_mem #(8,14,"rtl/roms/basic.901242+3-04a.mif") rom_basic_b
+wire [7:0] romLB128Data;
+rom_mem #(8,14,"rtl/roms/basic.901242+3-04a.mif") rom_lang_b128
 (
    .clock(clk_sys),
    .address(systemAddr),
-   .q(romB8Data)
+   .q(romLB128Data)
 );
 
-wire [7:0] romPCData;
+wire [7:0] romLB256Data;
+rom_mem #(8,14,"rtl/roms/basic-901240+1-03.mif") rom_lang_b256
+(
+   .clock(clk_sys),
+   .address(systemAddr),
+   .q(romLB256Data)
+);
+
+wire [7:0] romCPData;
 rom_mem #(8,12,"rtl/roms/characters.901225-01.mif") rom_char_p
 (
    .clock(clk_sys),
    .address(systemAddr),
-   .q(romPCData)
+   .q(romCPData)
 );
 
-wire [7:0] romPEData;
+wire [7:0] romKPData;
 rom_mem #(8,13,"rtl/roms/kernal.901234-02.mif") rom_kernal_p
 (
    .clock(clk_sys),
    .address(systemAddr),
-   .q(romPEData)
+   .q(romKPData)
 );
 
-wire [7:0] romBEData;
+wire [7:0] romKBData;
 rom_mem #(8,13,"rtl/roms/kernal.901244-04a.mif") rom_kernal_b
 (
    .clock(clk_sys),
    .address(systemAddr),
-   .q(romBEData)
+   .q(romKBData)
 );
 
 // From KERNAL_CBM2_1983-07-07/declare:
@@ -176,29 +185,33 @@ always @(*) begin
 
       if (cpuSeg == 15) begin
          case(cpuAddr[15:12])
-            4'h0: if (!cpuAddr[11] || ipcEn) cs_ram <= 1;
-            4'h1: if (extrom[0])             cs_ram <= 1;
-            4'h2, 4'h3: if (extrom[1])       cs_ram <= 1;
-            4'h4, 4'h5: if (extrom[2])       cs_ram <= 1;
-            4'h6, 4'h7: if (extrom[3])       cs_ram <= 1;
-            4'h8, 4'h9: if (extrom[4])       cs_ram <= 1; else cs_rom8 <= 1;
-            4'hA, 4'hB: if (extrom[5])       cs_ram <= 1; else cs_rom8 <= 1;
-            4'hC: if (extrom[6])             cs_ram <= 1; else if (!model) cs_romC <= 1;
+            4'h0: if (!cpuAddr[11] || ipcEn || extram) cs_ram <= 1;
+            4'h1: if (extrom[0])       begin cs_ram <= 1; systemWe <= 0; end
+                  else if (extram)           cs_ram <= 1;
+            4'h2, 4'h3: if (extrom[1]) begin cs_ram <= 1; systemWe <= 0; end
+                  else if (extram)           cs_ram <= 1;
+            4'h4, 4'h5: if (extrom[2]) begin cs_ram <= 1; systemWe <= 0; end
+                  else if (extram)           cs_ram <= 1;
+            4'h6, 4'h7: if (extrom[3]) begin cs_ram <= 1; systemWe <= 0; end
+                  else if (extram)           cs_ram <= 1;
+            4'h8, 4'h9: if (extrom[4])       cs_ram <= 1;
+                  else                       cs_rom8 <= 1;
+            4'hA, 4'hB: if (extrom[5])       cs_ram <= 1;
+                  else                       cs_rom8 <= 1;
+            4'hC: if (extrom[6])       begin cs_ram <= 1; systemWe <= 0; end
+                  else if (!model)           cs_romC <= 1;
+                  else if (extram)           cs_ram <= 1;
             4'hD: if (!cpuAddr[11] && (!cpuAddr[10] || model)) cs_ram <= 1;
-            4'hE, 4'hF: if (extrom[7])       cs_ram <= 1; else cs_romE <= 1;
+            4'hE, 4'hF: if (extrom[7])       cs_ram <= 1;
+                  else                       cs_romE <= 1;
             default: ;
          endcase
-
-         // prevent overwriting loaded ROMs
-         if (cpuAddr[15:12] != 0 && cpuAddr[15:12] != 4'hD)
-            systemWe <= 0;
       end
       else
          case (ramSize)
-            0: cs_ram <= model == 0 ? (cpuSeg<=3) : (cpuSeg>=1 && cpuSeg<=4);  // 256k
-            1: cs_ram <= model == 0 ? (cpuSeg<=1) : (cpuSeg>=1 && cpuSeg<=2);  // 128k
-            2: cs_ram <= model == 0 ? (cpuSeg==0) : (cpuSeg==1);               // 64k
-            3: cs_ram <= 1;                                                    // 1M
+               0: cs_ram <= !model ? cpuSeg<=3 : cpuSeg>=1 && cpuSeg<=4;  // 256k
+               1: cs_ram <= !model ? cpuSeg<=1 : cpuSeg>=1 && cpuSeg<=2;  // 128k
+         default: cs_ram <= !model || cpuSeg>=1;                          // 1M
          endcase
    end
 
@@ -248,11 +261,11 @@ always @(*) begin
       if (cs_ram)
          cpuDi <= ramData;
       else if (cs_rom8)
-         cpuDi <= model ? romB8Data : romP8Data;
+         cpuDi <= model ? (ramSize == 1 ? romLB128Data : romLB256Data) : romLPData;
       else if (cs_romC && !model)
-         cpuDi <= romPCData;
+         cpuDi <= romCPData;
       else if (cs_romE)
-         cpuDi <= model ? romBEData : romPEData;
+         cpuDi <= model ? romKBData : romKPData;
       else if (cs_colram && !model)
          cpuDi[3:0] <= colData;
       else if (cs_vic)
@@ -276,7 +289,7 @@ always @(*) begin
       if (cs_ram)
          vidDi <= ramData;
       else if (cs_romC)
-         vidDi <= romPCData;
+         vidDi <= romCPData;
 end
 
 endmodule

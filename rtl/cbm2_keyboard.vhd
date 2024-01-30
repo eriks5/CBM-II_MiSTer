@@ -26,6 +26,7 @@ entity cbm2_keyboard is
 		pci			: in unsigned(5 downto 0);
 		pco			: out unsigned(5 downto 0);
 
+		hard_reset  : out std_logic;
 		soft_reset  : out std_logic;
 
 		sftlk_sense : out std_logic
@@ -173,7 +174,8 @@ begin
 	key_alt <= key_altl or key_altr;
 	key_ctrl <= key_ctrll or key_ctrlr;
 
-	soft_reset <= key_alt and key_F11;
+	hard_reset <= key_alt and key_F11 and key_ctrl;
+	soft_reset <= key_alt and key_F11 and not key_ctrl;
 
 	pressed <= ps2_key(9);
 	matrix: process(clk)
