@@ -201,6 +201,8 @@ assign VGA_SCALER = 0;
 `include "build_id.v"
 localparam CONF_STR = {
 	"CBM-II;;",
+	"F9,PRG;",
+	"-;",
 	"P1,Hardware;",
 	"P1O[4:2],System,730,720,710,630,620,610,500,Custom;",
 	"h0P1-;H0H1P1-;",
@@ -414,6 +416,7 @@ hps_io #(.CONF_STR(CONF_STR)) hps_io
 	.ioctl_wait(ioctl_req_wr|reset_wait)
 );
 
+wire load_prg   = ioctl_index[5:0] == 9;
 wire load_rom1  = ioctl_index[5:0] == 8;
 wire load_rom2  = ioctl_index[5:0] == 7;
 wire load_rom4  = ioctl_index[5:0] == 6;
@@ -446,6 +449,8 @@ reg [1:0]  erasing, force_erase;  // 1 - erase segment 15 bank 0, 2 - erase all 
 reg [24:0] ioctl_load_addr;
 reg        ioctl_req_wr;
 
+reg        inj_meminit = 0;
+
 wire       io_cycle;
 reg        io_cycle_ce;
 reg        io_cycle_we;
@@ -456,8 +461,12 @@ reg  [7:0] rom_loaded = 0;
 
 always @(posedge clk_sys) begin
 	reg  [4:0] erase_to;
+	reg        old_download;
 	reg        io_cycleD;
+	reg [15:0] inj_start, inj_end;
+	reg  [7:0] inj_meminit_data;
 
+	old_download <= ioctl_download;
 	io_cycleD <= io_cycle;
 
 	if (~io_cycle & io_cycleD) begin
@@ -471,6 +480,8 @@ always @(posedge clk_sys) begin
 
 			if (erasing)
 				io_cycle_data <= &ioctl_load_addr[19:16] ? {8{ioctl_load_addr[6]}} : {8{ioctl_load_addr[14]^ioctl_load_addr[3]^ioctl_load_addr[2]}};
+			else if (inj_meminit)
+				io_cycle_data <= inj_meminit_data;
 			else begin
 				io_cycle_data <= ioctl_data;
 
@@ -483,21 +494,70 @@ always @(posedge clk_sys) begin
 	if (io_cycle & ~io_cycleD) io_cycle_ce <= 0;
 
 	if (ioctl_wr) begin
-		if (ioctl_addr == 0) begin
-			if (load_rom1) ioctl_load_addr <= 25'h00F_1000;
-			if (load_rom2) ioctl_load_addr <= 25'h00F_2000;
-			if (load_rom4) ioctl_load_addr <= 25'h00F_4000;
-			if (load_rom6) ioctl_load_addr <= 25'h00F_6000;
-			if (load_rom8) ioctl_load_addr <= 25'h00F_8000;
-			if (load_romC) ioctl_load_addr <= 25'h00F_C000;
-			if (load_romE) ioctl_load_addr <= 25'h00F_E000;
+		if (load_prg) begin
+			if (ioctl_addr == 0) begin
+				ioctl_load_addr[24:16] <= model ? 9'd1 : 9'd0;
+				ioctl_load_addr[7:0] <= ioctl_data;
+				inj_start[7:0] <= ioctl_data;
+				inj_end[7:0] <= ioctl_data;
+			end
+			else if (ioctl_addr == 1) begin
+				ioctl_load_addr[15:8] <= ioctl_data;
+				inj_start[15:8] <= ioctl_data;
+				inj_end[15:8] <= ioctl_data;
+			end
+			else begin
+				ioctl_req_wr <= 1;
+				inj_end <= inj_end + 1'b1;
+			end
+		end
 
-			if (load_rom1 || load_rom2 || load_rom4 || load_rom6 || load_rom8 || load_romC || load_romE)
+		if (load_rom1 || load_rom2 || load_rom4 || load_rom6 || load_rom8 || load_romC || load_romE) begin
+			if (ioctl_addr == 0) begin
+				if (load_rom1) ioctl_load_addr <= 25'h00F_1000;
+				if (load_rom2) ioctl_load_addr <= 25'h00F_2000;
+				if (load_rom4) ioctl_load_addr <= 25'h00F_4000;
+				if (load_rom6) ioctl_load_addr <= 25'h00F_6000;
+				if (load_rom8) ioctl_load_addr <= 25'h00F_8000;
+				if (load_romC) ioctl_load_addr <= 25'h00F_C000;
+				if (load_romE) ioctl_load_addr <= 25'h00F_E000;
+				ioctl_req_wr <= 1;
+			end
+			else if (ioctl_load_addr[24:16] == 'h00F && ioctl_load_addr[15:12] != 'hD)
 				ioctl_req_wr <= 1;
 		end
-		else if (load_rom1 || load_rom2 || load_rom4 || load_rom6 || load_rom8 || load_romC || load_romE) begin
-			if (ioctl_load_addr[24:16] == 'h00F && ioctl_load_addr[15:12] != 'hD)
-				ioctl_req_wr <= 1;
+	end
+
+	// meminit for RAM injection
+	if (old_download != ioctl_download && load_prg && !inj_meminit) begin
+		inj_meminit <= 1;
+		// inj_end <= ioctl_load_addr[15:0];
+		ioctl_load_addr <= 25'h00F_0000;
+	end
+
+	if (inj_meminit && !ioctl_req_wr) begin
+		if (ioctl_load_addr[8]) begin
+			inj_meminit <= 0;
+			// start_strk <= 1;
+		end
+		else begin
+			ioctl_req_wr <= 1;
+
+			// Initialize BASIC pointers to simulate the BASIC LOAD command
+			case(ioctl_load_addr[7:0])
+				// TXTTAB (2D-2E)
+				'h2D: inj_meminit_data <= inj_start[7:0];
+				'h2E: inj_meminit_data <= inj_start[15:8];
+
+				// TXTEND (2F-30)
+				'h2F: inj_meminit_data <= inj_end[7:0];
+				'h30: inj_meminit_data <= inj_end[15:8];
+
+				default: begin
+					ioctl_req_wr <= 0;
+					ioctl_load_addr <= ioctl_load_addr + 1'b1;
+				end
+			endcase
 		end
 	end
 
