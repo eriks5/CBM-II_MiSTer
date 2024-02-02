@@ -333,8 +333,8 @@ sid_top #(
    .data_in(cpuDo),
    .data_out(sidData),
 
-   .pot_x_l(0),
-   .pot_y_r(0),
+   .pot_x_l(8'd255),
+   .pot_y_l(8'd255),
 
    .audio_l(audio),
 
