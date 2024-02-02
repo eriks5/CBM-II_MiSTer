@@ -45,7 +45,6 @@ architecture rtl of cpu_6509 is
 	signal exeReg : std_logic_vector(7 downto 0);
 	signal indReg : std_logic_vector(7 downto 0);
 
-	signal indCycles : unsigned(2 downto 0);
 	signal indCount : unsigned(2 downto 0);
 	signal lastA0 : std_logic;
 begin
@@ -80,7 +79,7 @@ begin
 				indReg <= X"0F";
 			elsif localAccess = '1' and localWe = '0' and enable = '1' then
 				if localA(0) = '0' then
-					exeReg <=localDo;
+					exeReg <= localDo;
 				else
 					indReg <= localDo;
 				end if;
@@ -100,14 +99,13 @@ begin
 				indCount <= (others => '0');
 			elsif enable = '1' then
 				lastA0 <= localA(0);
-				if sync = '1' and rdy = '1' and din(7 downto 6) = "10" and din(4 downto 0) = "10001" then
-					indCount <= to_unsigned(1, 3);
-					if din(5) = '1' then
-						indCycles <= to_unsigned(4, 3);
+				if sync = '1' then
+					if rdy = '1' and din(7 downto 6) = "10" and din(4 downto 0) = "10001" then
+						indCount <= to_unsigned(1, 3);
 					else
-						indCycles <= to_unsigned(5, 3);
+						indCount <= (others => '0');
 					end if;
-				elsif (indCount = 1 and (rdy = '0' or localA(0) = lastA0)) or (indCount = indCycles) then
+				elsif (indCount = 1 and (rdy = '0' or localA(0) = lastA0)) then
 					indCount <= (others => '0');
 				elsif indCount /= 0 then
 					indCount <= indCount + 1;
@@ -118,6 +116,6 @@ begin
 
 	addr <= unsigned(localA(15 downto 0));
 	dout <= unsigned(localDo) when localAccess = '0' or widePO = '1' else unsigned("0000" & localDo(3 downto 0));
-	pout <= unsigned(indReg) when indCount >= 4 else unsigned(exeReg);
+	pout <= unsigned(indReg) when sync = '0' and indCount >= 4 else unsigned(exeReg);
 	we <= not localWe;
 end architecture;
