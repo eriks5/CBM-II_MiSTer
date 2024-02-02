@@ -3,10 +3,10 @@ module cbm2_main (
    input         profile,   // 0=Low, 1=High (Business only)
    input         ntsc,      // 0=PAL, 1=NTSC
    input         turbo,     // 1=2MHz CPU clock (Professional only)
-   input  [1:0]  ramSize,   // 0=64k, 1=128k, 2=1M
-   input  [1:0]  copro,     // 0=none, 1=8088
+   input   [1:0] ramSize,   // 0=64k, 1=128k, 2=1M
+   input   [1:0] copro,     // 0=none, 1=8088
 
-   input  [7:0]  extrom,
+   input   [7:0] extrom,
    input         extram,
 
    input         pause,
@@ -19,9 +19,17 @@ module cbm2_main (
    input  [10:0] ps2_key,
    input         kbd_reset,
 
+   input         sid_ver,
+   input   [1:0] sid_cfg,
+   input  [12:0] sid_fc_off,
+   input         sid_ld_clk,
+   input         sid_ld_addr,
+   input         sid_ld_data,
+   input         sid_ld_wr,
+
    output [24:0] ramAddr,
-   input  [7:0]  ramData,    // from sdram
-   output [7:0]  ramOut,     // to sdram
+   input   [7:0] ramData,    // from sdram
+   output  [7:0] ramOut,     // to sdram
    output        ramCE,
    output        ramWE,
 
@@ -30,9 +38,11 @@ module cbm2_main (
 
    output        hsync,
    output        vsync,
-   output [7:0]  r,
-   output [7:0]  g,
-   output [7:0]  b,
+   output  [7:0] r,
+   output  [7:0] g,
+   output  [7:0] b,
+
+   output [17:0] audio,
 
    output        sftlk_sense,
    output        hard_reset,
@@ -311,15 +321,33 @@ assign vsync = model ? crtcVsync : vicVSync;
 
 reg [7:0]  sidData;
 
-sid_top sid (
+sid_top #(
+   .DUAL(0)
+) sid (
    .reset(reset),
    .clk(clk_sys),
-   .ce_1m(enableIO_p),
+   .ce_1m(enableIO_p & phase),
    .we(pulseWr_io),
    .cs(cs_sid),
    .addr(cpuAddr[4:0]),
    .data_in(cpuDo),
-   .data_out(sidData)
+   .data_out(sidData),
+
+   .pot_x_l(0),
+   .pot_y_r(0),
+
+   .audio_l(audio),
+
+   .ext_in_l({sid_ver, 17'd0}),
+   .filter_en(1'b1),
+   .mode(sid_ver),
+   .cfg(sid_cfg),
+
+   .fc_offset_l(sid_fc_off),
+   .ld_clk(sid_ld_clk),
+   .ld_addr(sid_ld_addr),
+   .ld_data(sid_ld_data),
+   .ld_wr(sid_ld_wr)
 );
 
 // ============================================================================

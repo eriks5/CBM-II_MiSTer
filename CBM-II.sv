@@ -177,11 +177,6 @@ assign {UART_RTS, UART_TXD, UART_DTR} = 0;
 assign {DDRAM_CLK, DDRAM_BURSTCNT, DDRAM_ADDR, DDRAM_DIN, DDRAM_BE, DDRAM_RD, DDRAM_WE} = '0;
 assign {SD_SCK, SD_MOSI, SD_CS} = 'Z;
 
-assign AUDIO_S = 0;
-assign AUDIO_L = 0;
-assign AUDIO_R = 0;
-assign AUDIO_MIX = 0;
-
 assign LED_DISK = 0;
 assign LED_POWER = 0;
 assign LED_USER = 0;
@@ -196,13 +191,14 @@ assign VGA_SCALER = 0;
 // 0         1         2         3          4         5         6
 // 01234567890123456789012345678901 23456789012345678901234567890123
 // 0123456789ABCDEFGHIJKLMNOPQRSTUV 0123456789ABCDEFGHIJKLMNOPQRSTUV
-// XXXXXXXXXXXXXXXXXXXXXXXXX
+// XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 
 `include "build_id.v"
 localparam CONF_STR = {
 	"CBM-II;;",
 	"F9,PRG;",
 	"-;",
+
 	"P1,Hardware;",
 	"P1O[4:2],System,730,720,710,630,620,610,500,Custom;",
 	"h0P1-;H0H1P1-;",
@@ -216,13 +212,20 @@ localparam CONF_STR = {
 	"P1O[13],Release Keys on Reset,Yes,No;",
 	"P1O[14],Clear All RAM on Reset,Yes,No;",
 	"P1O[15],Pause When OSD is Open,No,Yes;",
+
    "P2,Audio & Video;",
 	"H2P2O[12],TV System,PAL,NTSC;",
 	"H2P2-;",
 	"P2O[17:16],Aspect Ratio,Original,Full Screen,[ARC1],[ARC2];",
 	"P2O[20:18],Scandoubler Fx,None,HQ2x-320,HQ2x-160,CRT 25%,CRT 50%,CRT 75%;",
-	"P2d3O[21],Vertical Crop,No,Yes;",
+	"d3P2O[21],Vertical Crop,No,Yes;",
 	"P2O[23:22],Scale,Normal,V-Integer,Narrower HV-Integer,Wider HV-Integer;",
+	"P2-;",
+	"P2O[25],SID,6581,8580;",
+	"D4P2O[28:26],SID Filter,Default,Custom 1,Custom 2,Custom 3,Adjustable;",
+	"D4D5P2O[31:29],Fc Offset,0,1,2,3,4,5;",
+	"P2FCA,FLT,Load Custom Filters;",
+
 	"P3,Loadable ROM;",
 	"P3FC8,ROMBIN,Load Rom $1000              ;",
   	"P3FC7,ROMBIN,Load Rom $2000              ;",
@@ -395,6 +398,8 @@ hps_io #(.CONF_STR(CONF_STR)) hps_io
 
 	.status(status),
 	.status_menumask({
+		/* 5 */ ~status[28],
+		/* 4 */ status[25],
 		/* 3 */ |vcrop,
 		/* 2 */ model7x0,
 		/* 1 */ model,
@@ -424,6 +429,7 @@ wire load_rom6  = ioctl_index[5:0] == 5;
 wire load_rom8  = ioctl_index[5:0] == 4;
 wire load_romC  = ioctl_index[5:0] == 3;
 wire load_romE  = ioctl_index[5:0] == 2;
+wire load_flt   = ioctl_index[5:0] == 10;
 
 wire       model500 = status[4:2] == 6;
 wire       model6x0 = status[4:2] == 3 || status[4:2] == 4 || status[4:2] == 5;
@@ -531,7 +537,6 @@ always @(posedge clk_sys) begin
 	// meminit for RAM injection
 	if (old_download != ioctl_download && load_prg && !inj_meminit) begin
 		inj_meminit <= 1;
-		// inj_end <= ioctl_load_addr[15:0];
 		ioctl_load_addr <= 25'h00F_0000;
 	end
 
@@ -598,6 +603,23 @@ always @(posedge clk_sys) begin
 	end
 end
 
+reg [11:0] sid_ld_addr = 0;
+reg [15:0] sid_ld_data = 0;
+reg        sid_ld_wr   = 0;
+always @(posedge clk_sys) begin
+	sid_ld_wr <= 0;
+	if(ioctl_wr && load_flt && ioctl_addr < 6144) begin
+		if(ioctl_addr[0]) begin
+			sid_ld_data[15:8] <= ioctl_data;
+			sid_ld_addr <= ioctl_addr[12:1];
+			sid_ld_wr <= 1;
+		end
+		else begin
+			sid_ld_data[7:0] <= ioctl_data;
+		end
+	end
+end
+
 // ========================================================================
 // SDRAM
 // ========================================================================
@@ -635,16 +657,18 @@ sdram sdram
 wire [24:0] cpu_addr;
 wire        cpu_ce;
 wire        cpu_we;
-wire [7:0]  cpu_out;
+wire  [7:0] cpu_out;
 
 wire        pause;
 
 wire        refresh;
-wire [7:0]  r, g, b;
+wire  [7:0] r, g, b;
 wire        hsync, vsync;
 
 wire        hard_reset;
 wire        soft_reset;
+
+wire [17:0] audio;
 
 cbm2_main main (
 	.CLK(CLK),
@@ -668,6 +692,14 @@ cbm2_main main (
 	.kbd_reset(~reset_n & ~status[13]),
 	.ps2_key(ps2_key),
 
+	.sid_ld_clk(clk_sys),
+	.sid_ld_addr(sid_ld_addr),
+	.sid_ld_data(sid_ld_data),
+	.sid_ld_wr(sid_ld_wr),
+	.sid_ver(status[25]),
+	.sid_cfg(status[27:26]),
+	.sid_fc_off(status[28] ? (13'h600 - {status[31:29],7'd0}) : 13'd0),
+
 	.ramAddr(cpu_addr),
 	.ramData(sdram_data),
 	.ramOut(cpu_out),
@@ -682,6 +714,8 @@ cbm2_main main (
 	.r(r),
 	.g(g),
 	.b(b),
+
+	.audio(audio),
 
 	.sftlk_sense(sftlk_sense),
 	.hard_reset(hard_reset),
@@ -829,5 +863,14 @@ video_mixer #(.GAMMA(1)) video_mixer
 	.VGA_HS(VGA_HS),
 	.VGA_DE(vga_de)
 );
+
+// ========================================================================
+// Audio
+// ========================================================================
+
+assign AUDIO_S = 1;
+assign AUDIO_L = audio[17:2];
+assign AUDIO_R = audio[17:2];
+assign AUDIO_MIX = 0;
 
 endmodule
