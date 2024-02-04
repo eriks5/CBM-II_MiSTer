@@ -136,6 +136,7 @@ reg [7:0]  cpuDo;
 // ============================================================================
 
 wire irq_n = irq_tpi1 & irq_vic;
+wire rdy   = model | baLoc | (statvid & ~procvid);
 
 cpu_6509 cpu (
    .widePO(0),
@@ -143,10 +144,8 @@ cpu_6509 cpu (
    .enable(enableCpu),
    .reset(reset),
 
-   .nmi_n(1),
-   // .nmi_ack(nmi_ack),
    .irq_n(irq_n),
-   .rdy(1),
+   .rdy(rdy),
 
    .addr(cpuAddr),
    .din(cpuDi),
@@ -660,6 +659,8 @@ reg       cs_acia;
 reg       cs_tpi1;
 reg       cs_tpi2;
 
+reg       procvid;
+
 cbm2_buslogic buslogic (
    .model(model),
    .profile(profile),
@@ -702,6 +703,7 @@ cbm2_buslogic buslogic (
    .cs_acia(cs_acia),
    .cs_tpi1(cs_tpi1),
    .cs_tpi2(cs_tpi2),
+   .procvid(procvid),
 
    .colData(colData),
    .vicData(vicData),

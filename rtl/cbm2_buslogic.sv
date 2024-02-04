@@ -40,6 +40,7 @@ module cbm2_buslogic (
    output        cs_acia,
    output        cs_tpi1,
    output        cs_tpi2,
+   output        procvid,
 
    input  [3:0]  colData,
    input  [7:0]  vicData,
@@ -164,7 +165,6 @@ always @(*) begin
          4'hF:             cs_tpi2   <= 1; // tpi-port 2
          default:          ;
       endcase
-
 end
 
 always @(*) begin
@@ -241,6 +241,17 @@ always @(*) begin
       systemAddr[19:0] <= {8'hFD, 1'b0, crtcAddr};
       cs_ram <= 1;
    end
+end
+
+always @(*) begin
+   // procvid
+
+   procvid <= 0;
+   if ((cpuSeg == 15) && (
+      (cpuAddr[15:12] == 4'hC && !model)  /* $CFFF-$C000 charrom */
+      || (cpuAddr[15:11] == 5'b11010)     /* $D7FF-$D000 videoram/colorram */
+   ))
+      procvid <= 1;
 end
 
 reg [7:0] lastCpuDi;
