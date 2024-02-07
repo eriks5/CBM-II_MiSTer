@@ -19,6 +19,14 @@ module cbm2_main (
    input  [10:0] ps2_key,
    input         kbd_reset,
 
+   input         joy_en,
+   input   [4:0] joya,
+   input   [4:0] joyb,
+   input   [7:0] pot1,
+   input   [7:0] pot2,
+   input   [7:0] pot3,
+   input   [7:0] pot4,
+
    input         sid_ver,
    input   [1:0] sid_cfg,
    input  [12:0] sid_fc_off,
@@ -207,7 +215,7 @@ video_vicii_656x #(
 
    .cs(cs_vic),
    .we(cpuWe),
-   .lp_n(0),
+   .lp_n(tpi1_pao[6] & joya[4]),
 
    .aRegisters(cpuAddr[5:0]),
    .diRegisters(cpuDo),
@@ -318,7 +326,12 @@ assign vsync = model ? crtcVsync : vicVSync;
 // SID
 // ============================================================================
 
-reg [7:0]  sidData;
+reg  [7:0] sidData;
+
+wire [7:0] pot_x1 = ~model & cia_pao[0] ? ~pot1 : 8'hff;
+wire [7:0] pot_y1 = ~model & cia_pao[0] ? ~pot2 : 8'hff;
+wire [7:0] pot_x2 = ~model & cia_pao[1] ? ~pot3 : 8'hff;
+wire [7:0] pot_y2 = ~model & cia_pao[1] ? ~pot4 : 8'hff;
 
 sid_top #(
    .DUAL(0)
@@ -332,8 +345,8 @@ sid_top #(
    .data_in(cpuDo),
    .data_out(sidData),
 
-   .pot_x_l(8'd255),
-   .pot_y_l(8'd255),
+   .pot_x_l(pot_x1 & pot_x2),
+   .pot_y_l(pot_y1 & pot_y2),
 
    .audio_l(audio),
 
@@ -438,7 +451,10 @@ always @(posedge clk_sys) begin
 end
 
 wire       irq_cia;
-reg [7:0]  ciaData;
+reg  [7:0] ciaData;
+
+reg  [7:0] cia_pao;
+reg  [7:0] cia_pbo;
 
 mos6526 cia (
    .mode(0),
@@ -453,6 +469,12 @@ mos6526 cia (
    .rs(cpuAddr[3:0]),
    .db_in(cpuDo),
    .db_out(ciaData),
+
+   .pa_in(cia_pao & ~{joyb[4] & joy_en, joya[4] & joy_en, 6'b000000}),
+   .pa_out(cia_pao),
+
+   .pb_in(cia_pbo & ~({joyb[3:0], joya[3:0]} & {8{joy_en}})),
+   .pb_out(cia_pbo),
 
    .tod(todclk),
    .irq_n(irq_cia)
@@ -514,25 +536,30 @@ wire [7:0] tpi1_pao;
 wire [7:0] tpi1_pbo;
 wire [7:0] tpi1_pco;
 
-wire       ifc_i = 1'b1;
-wire       ifc_o = tpi1_pbo[0];
-wire       srq_i = 1'b1;
-wire       srq_o = tpi1_pbo[1];
-wire       ren_i = 1'b1;
-wire       ren_o = tpi1_pao[2];
-wire       atn_i = 1'b1;
-wire       atn_o = tpi1_pao[3];
-wire       dav_i = 1'b1;
-wire       dav_o = tpi1_pao[4];
-wire       eoi_i = 1'b1;
-wire       eoi_o = tpi1_pao[5];
-wire       ndac_i = 1'b1;
-wire       ndac_o = tpi1_pao[6];
 wire       nrfd_i = 1'b1;
 wire       nrfd_o = tpi1_pao[7];
+wire       ndac_i = 1'b1;
+wire       ndac_o = tpi1_pao[6];
+wire       eoi_i = 1'b1;
+wire       eoi_o = tpi1_pao[5];
+wire       dav_i = 1'b1;
+wire       dav_o = tpi1_pao[4];
+wire       atn_i = 1'b1;
+wire       atn_o = tpi1_pao[3];
+wire       ren_i = 1'b1;
+wire       ren_o = tpi1_pao[2];
+wire       talken = tpi1_pao[1];
 
 wire       dirctl = tpi1_pao[0];
-wire       talken = tpi1_pao[1];
+
+wire       cassw = tpi1_pbo[7];
+wire       cassmtr = tpi1_pbo[6];
+wire       casswrt = tpi1_pbo[5];
+wire       dramon = tpi1_pbo[4];
+wire       srq_i = 1'b1;
+wire       srq_o = tpi1_pbo[1];
+wire       ifc_i = 1'b1;
+wire       ifc_o = tpi1_pbo[0];
 
 wire       irq_tpi1 = tpi1_pco[5];
 wire       statvid = tpi1_pco[6];
@@ -551,13 +578,13 @@ mos_tpi tpi1 (
    .db_in(cpuDo),
    .db_out(tpi1Data),
 
-   .pa_in({nrfd_i, ndac_i, eoi_i, dav_i, atn_i, ren_i, tpi1_pao[1:0]}),
+   .pa_in(tpi1_pao & {nrfd_i, ndac_i, eoi_i, dav_i, atn_i, ren_i, 2'b11}),
    .pa_out(tpi1_pao),
 
-   .pb_in({tpi1_pbo[7:2], srq_i, ifc_i}),
+   .pb_in(tpi1_pbo & {6'b111111, srq_i, ifc_i}),
    .pb_out(tpi1_pbo),
 
-   .pc_in({tpi1_pco[7:5], irq_acia, irq_ipcia, irq_cia, srq_i & srq_o, todclk}),
+   .pc_in(tpi1_pco & {3'b111, irq_acia, irq_ipcia, irq_cia, srq_i & srq_o, todclk}),
    .pc_out(tpi1_pco)
 );
 
@@ -619,7 +646,7 @@ mos_tpi tpi2 (
    .pb_in(tpi2_pbo),
    .pb_out(tpi2_pbo),
 
-   .pc_in({(~model | profile) & tpi2_pco[7], (~model | ntsc) & tpi2_pco[6], tpi2_pci}),
+   .pc_in(tpi2_pco & {(~model | profile), (~model | ntsc), tpi2_pci}),
    .pc_out(tpi2_pco)
 );
 
@@ -634,8 +661,7 @@ cbm2_keyboard keyboard (
 
    .pai(tpi2_pao),
    .pbi(tpi2_pbo),
-   .pci(tpi2_pco[5:0]),
-   .pco(tpi2_pci[5:0]),
+   .pco(tpi2_pci),
 
    .hard_reset(hard_reset),
    .soft_reset(soft_reset),

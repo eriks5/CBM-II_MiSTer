@@ -191,7 +191,7 @@ assign VGA_SCALER = 0;
 // 0         1         2         3          4         5         6
 // 01234567890123456789012345678901 23456789012345678901234567890123
 // 0123456789ABCDEFGHIJKLMNOPQRSTUV 0123456789ABCDEFGHIJKLMNOPQRSTUV
-// XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+// XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX XXXXXX
 
 `include "build_id.v"
 localparam CONF_STR = {
@@ -201,11 +201,17 @@ localparam CONF_STR = {
 
 	"P1,Hardware;",
 	"P1O[4:2],System,730,720,710,630,620,610,500,Custom;",
-	"h0P1-;H0H1P1-;",
+	"h0P1-;",
 	"h0P1O[6:5],Model,High Profile,Low Profile,Professional;",
 	"h0P1O[8:7],Co-processor,None,8088;",
 	"h0P1O[10:9],RAM,256K,128K,1M;",
+	"H0H1P1-;",
 	"H1P1O[11],CPU Clock,1 MHz,2 MHz;",
+	"h0h1P1-;H1h6P1-;",
+	"h0h1P1O[37],Enable Joysticks,No,Yes;",
+	"h6P1O[36],Swap Joysticks,No,Yes;",
+	"H1P1O[33:32],Pot 1/2,Joy 1 Fire 2/3,Mouse,Paddles 1/2;",
+	"H1P1O[35:34],Pot 3/4,Joy 2 Fire 2/3,Mouse,Paddles 3/4;",
 	"P1-;",
 	"P1O[24],Extra RAM Segment 15,Off,On;",
 	"P1-;",
@@ -238,6 +244,9 @@ localparam CONF_STR = {
 	"-;",
  	"R[0],Hard reset;",
 	"R[1],Soft reset;",
+	"J,Fire 1,Fire 2,Fire 3,Paddle Btn;",
+	"jn,A,B,Y,X|P;",
+	"jp,A,B,Y,X|P;",
 	"v,0;",
 	"V,v",`BUILD_DATE
 };
@@ -381,6 +390,7 @@ wire   [7:0] ioctl_data;
 wire   [7:0] ioctl_index;
 wire         ioctl_download;
 
+wire  [24:0] ps2_mouse;
 wire  [10:0] ps2_key;
 wire   [2:0] ps2_kbd_led_status = {2'b00, sftlk_sense};
 wire   [2:0] ps2_kbd_led_use = 3'b001;
@@ -390,6 +400,10 @@ wire         sftlk_sense;
 
 wire  [21:0] gamma_bus;
 
+wire         joy_en = ~model | (cfgcust & status[37]);
+wire  [15:0] joyA, joyB, joyC, joyD;
+wire   [7:0] pd1, pd2,pd3, pd4;
+
 hps_io #(.CONF_STR(CONF_STR)) hps_io
 (
 	.clk_sys(clk_sys),
@@ -398,6 +412,7 @@ hps_io #(.CONF_STR(CONF_STR)) hps_io
 
 	.status(status),
 	.status_menumask({
+		/* 6 */ joy_en,
 		/* 5 */ ~status[28],
 		/* 4 */ status[25],
 		/* 3 */ |vcrop,
@@ -410,8 +425,19 @@ hps_io #(.CONF_STR(CONF_STR)) hps_io
 	.gamma_bus(gamma_bus),
 
    .ps2_key(ps2_key),
+	.ps2_mouse(ps2_mouse),
    .ps2_kbd_led_status(ps2_kbd_led_status),
    .ps2_kbd_led_use(ps2_kbd_led_use),
+
+	.joystick_0(joyA),
+	.joystick_1(joyB),
+	.joystick_2(joyC),
+	.joystick_3(joyD),
+
+	.paddle_0(pd1),
+	.paddle_1(pd2),
+	.paddle_2(pd3),
+	.paddle_3(pd4),
 
 	.ioctl_download(ioctl_download),
 	.ioctl_index(ioctl_index),
@@ -651,6 +677,44 @@ sdram sdram
 );
 
 // ========================================================================
+// Joystick/paddles/mouse
+// ========================================================================
+
+wire [7:0] mouse_x;
+wire [7:0] mouse_y;
+wire [1:0] mouse_btn;
+
+c1351 mouse
+(
+	.clk_sys(clk_sys),
+	.reset(~reset_n),
+
+	.ps2_mouse(ps2_mouse),
+
+	.potX(mouse_x),
+	.potY(mouse_y),
+	.button(mouse_btn)
+);
+
+wire  [1:0] pd12_mode = status[33:32];
+wire  [1:0] pd34_mode = status[35:34];
+
+wire  [6:0] joyA_int = {joyA[6:4], joyA[0], joyA[1], joyA[2], joyA[3]};
+wire  [6:0] joyB_int = {joyB[6:4], joyB[0], joyB[1], joyB[2], joyB[3]};
+wire  [6:0] joyA_cbm = status[36] ? joyB_int : joyA_int;
+wire  [6:0] joyB_cbm = status[36] ? joyA_int : joyB_int;
+
+wire  [7:0] paddle_1 = status[36] ? pd3 : pd1;
+wire  [7:0] paddle_2 = status[36] ? pd4 : pd2;
+wire  [7:0] paddle_3 = status[36] ? pd1 : pd3;
+wire  [7:0] paddle_4 = status[36] ? pd2 : pd4;
+
+wire        paddle_1_btn = status[36] ? joyC[7] : joyA[7];
+wire        paddle_2_btn = status[36] ? joyD[7] : joyB[7];
+wire        paddle_3_btn = status[36] ? joyA[7] : joyC[7];
+wire        paddle_4_btn = status[36] ? joyB[7] : joyD[7];
+
+// ========================================================================
 // CBM-II Main
 // ========================================================================
 
@@ -691,6 +755,15 @@ cbm2_main main (
 
 	.kbd_reset(~reset_n & ~status[13]),
 	.ps2_key(ps2_key),
+
+	.joy_en(joy_en),
+	.joya({joyA_cbm[4:0] | {1'b0, pd12_mode[1] & paddle_2_btn, pd12_mode[1] & paddle_1_btn, 2'b00} | {pd12_mode[0] & mouse_btn[0], 3'b000, pd12_mode[0] & mouse_btn[1]}}),
+	.joyb({joyB_cbm[4:0] | {1'b0, pd34_mode[1] & paddle_4_btn, pd34_mode[1] & paddle_3_btn, 2'b00} | {pd34_mode[0] & mouse_btn[0], 3'b000, pd34_mode[0] & mouse_btn[1]}}),
+
+	.pot1(pd12_mode[1] ? paddle_1 : pd12_mode[0] ? mouse_x : {8{joyA_cbm[5]}}),
+	.pot2(pd12_mode[1] ? paddle_2 : pd12_mode[0] ? mouse_y : {8{joyA_cbm[6]}}),
+	.pot3(pd34_mode[1] ? paddle_3 : pd34_mode[0] ? mouse_x : {8{joyB_cbm[5]}}),
+	.pot4(pd34_mode[1] ? paddle_4 : pd34_mode[0] ? mouse_y : {8{joyB_cbm[6]}}),
 
 	.sid_ld_clk(clk_sys),
 	.sid_ld_addr(sid_ld_addr),

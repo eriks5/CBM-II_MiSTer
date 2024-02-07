@@ -23,7 +23,6 @@ entity cbm2_keyboard is
 		ps2_key     : in std_logic_vector(10 downto 0);
 		pai         : in unsigned(7 downto 0);
 		pbi         : in unsigned(7 downto 0);
-		pci			: in unsigned(5 downto 0);
 		pco			: out unsigned(5 downto 0);
 
 		hard_reset  : out std_logic;
@@ -183,109 +182,103 @@ begin
 		if rising_edge(clk) then
 			ps2_stb <= ps2_key(10);
 
-			pco(0) <= pci(0) and
-							(pbi(0) or not key_F1) and
-							(pbi(1) or not key_F2) and
-							(pbi(2) or not key_F3) and
-							(pbi(3) or not key_F4) and
-							(pbi(4) or not key_F5) and
-							(pbi(5) or not key_F6) and
-							(pbi(6) or not key_F7) and
-							(pbi(7) or not key_F8) and
-							(pai(0) or not key_F9) and
-							(pai(1) or not key_F10) and
-							(pai(2) or not key_down) and
-							(pai(3) or not key_up) and
-							(pai(4) or not key_home) and
-							(pai(5) or not key_rvs) and
-							(pai(6) or not key_graph) and
-							(pai(7) or not key_runstop);
+			pco(0) <= (pbi(0) or not key_F1) and
+						 (pbi(1) or not key_F2) and
+						 (pbi(2) or not key_F3) and
+						 (pbi(3) or not key_F4) and
+						 (pbi(4) or not key_F5) and
+						 (pbi(5) or not key_F6) and
+						 (pbi(6) or not key_F7) and
+						 (pbi(7) or not key_F8) and
+						 (pai(0) or not key_F9) and
+						 (pai(1) or not key_F10) and
+						 (pai(2) or not key_down) and
+						 (pai(3) or not key_up) and
+						 (pai(4) or not key_home) and
+						 (pai(5) or not key_rvs) and
+						 (pai(6) or not key_graph) and
+						 (pai(7) or not key_runstop);
 
-			pco(1) <= pci(1) and
-							(pbi(0) or not key_esc) and
-							(pbi(1) or not key_1) and
-							(pbi(2) or not key_2) and
-							(pbi(3) or not key_3) and
-							(pbi(4) or not key_4) and
-							(pbi(5) or not key_5) and
-							(pbi(6) or not key_7) and
-							(pbi(7) or not key_8) and
-							(pai(0) or not key_9) and
-							(pai(1) or not key_0) and
-							(pai(2) or not key_equal) and
-							(pai(3) or not key_left) and
-							(pai(4) or not (key_alt and key_numslash)) and
-							(pai(5) or not key_ce) and
-							(pai(6) or not key_numstar) and
-							(pai(7) or not (not key_alt and key_numslash));
+			pco(1) <= (pbi(0) or not key_esc) and
+						 (pbi(1) or not key_1) and
+						 (pbi(2) or not key_2) and
+						 (pbi(3) or not key_3) and
+						 (pbi(4) or not key_4) and
+						 (pbi(5) or not key_5) and
+						 (pbi(6) or not key_7) and
+						 (pbi(7) or not key_8) and
+						 (pai(0) or not key_9) and
+						 (pai(1) or not key_0) and
+						 (pai(2) or not key_equal) and
+						 (pai(3) or not key_left) and
+						 (pai(4) or not (key_alt and key_numslash)) and
+						 (pai(5) or not key_ce) and
+						 (pai(6) or not key_numstar) and
+						 (pai(7) or not (not key_alt and key_numslash));
 
-			pco(2) <= pci(2) and
-							(pbi(0) or not key_tab) and
-							(pbi(1) or not key_Q) and
-							(pbi(2) or not key_W) and
-							(pbi(3) or not key_E) and
-							(pbi(4) or not key_R) and
-							(pbi(5) or not key_6) and
-							(pbi(6) or not key_U) and
-							(pbi(7) or not key_I) and
-							(pai(0) or not key_O) and
-							(pai(1) or not key_minus) and
-							(pai(2) or not key_arrowleft) and
-							(pai(3) or not key_right) and
-							(pai(4) or not key_num7) and
-							(pai(5) or not key_num8) and
-							(pai(6) or not key_num9) and
-							(pai(7) or not key_numminus);
+			pco(2) <= (pbi(0) or not key_tab) and
+						 (pbi(1) or not key_Q) and
+						 (pbi(2) or not key_W) and
+						 (pbi(3) or not key_E) and
+						 (pbi(4) or not key_R) and
+						 (pbi(5) or not key_6) and
+						 (pbi(6) or not key_U) and
+						 (pbi(7) or not key_I) and
+						 (pai(0) or not key_O) and
+						 (pai(1) or not key_minus) and
+						 (pai(2) or not key_arrowleft) and
+						 (pai(3) or not key_right) and
+						 (pai(4) or not key_num7) and
+						 (pai(5) or not key_num8) and
+						 (pai(6) or not key_num9) and
+						 (pai(7) or not key_numminus);
 
-			pco(3) <= pci(3) and
-							(pbi(1) or not key_A) and
-							(pbi(2) or not key_S) and
-							(pbi(3) or not key_D) and
-							(pbi(4) or not key_T) and
-							(pbi(5) or not key_Y) and
-							(pbi(6) or not key_J) and
-							(pbi(7) or not key_K) and
-							(pai(0) or not key_L) and
-							(pai(1) or not key_P) and
-							(pai(2) or not key_rbrack) and
-							(pai(3) or not (key_del or key_ins)) and
-							(pai(4) or not key_num4) and
-							(pai(5) or not key_num5) and
-							(pai(6) or not key_num6) and
-							(pai(7) or not key_numplus);
+			pco(3) <= (pbi(1) or not key_A) and
+						 (pbi(2) or not key_S) and
+						 (pbi(3) or not key_D) and
+						 (pbi(4) or not key_T) and
+						 (pbi(5) or not key_Y) and
+						 (pbi(6) or not key_J) and
+						 (pbi(7) or not key_K) and
+						 (pai(0) or not key_L) and
+						 (pai(1) or not key_P) and
+						 (pai(2) or not key_rbrack) and
+						 (pai(3) or not (key_del or key_ins)) and
+						 (pai(4) or not key_num4) and
+						 (pai(5) or not key_num5) and
+						 (pai(6) or not key_num6) and
+						 (pai(7) or not key_numplus);
 
-			pco(4) <= pci(4) and
-							(pbi(0) or not key_shift) and
-							(pbi(1) or not key_Z) and
-							(pbi(2) or not key_X) and
-							(pbi(3) or not key_F) and
-							(pbi(4) or not key_G) and
-							(pbi(5) or not key_H) and
-							(pbi(6) or not key_M) and
-							(pbi(7) or not key_comma) and
-							(pai(0) or not key_semicolon) and
-							(pai(1) or not key_lbrack) and
-							(pai(2) or not key_return) and
-							(pai(3) or not (not key_alt and key_F11)) and
-							(pai(4) or not key_num1) and
-							(pai(5) or not key_num2) and
-							(pai(6) or not key_num3) and
-							(pai(7) or not key_enter);
+			pco(4) <= (pbi(0) or not key_shift) and
+						 (pbi(1) or not key_Z) and
+						 (pbi(2) or not key_X) and
+						 (pbi(3) or not key_F) and
+						 (pbi(4) or not key_G) and
+						 (pbi(5) or not key_H) and
+						 (pbi(6) or not key_M) and
+						 (pbi(7) or not key_comma) and
+						 (pai(0) or not key_semicolon) and
+						 (pai(1) or not key_lbrack) and
+						 (pai(2) or not key_return) and
+						 (pai(3) or not (not key_alt and key_F11)) and
+						 (pai(4) or not key_num1) and
+						 (pai(5) or not key_num2) and
+						 (pai(6) or not key_num3) and
+						 (pai(7) or not key_enter);
 
-			pco(5) <= pci(5) and
-							(pbi(0) or not key_ctrl) and
-							(pbi(2) or not key_C) and
-							(pbi(3) or not key_V) and
-							(pbi(4) or not key_B) and
-							(pbi(5) or not key_N) and
-							(pbi(6) or not key_space) and
-							(pbi(7) or not key_dot) and
-							(pai(0) or not key_slash) and
-							(pai(1) or not key_quote) and
-							(pai(2) or not key_pi) and
-							(pai(4) or not (not key_alt and key_num0)) and
-							(pai(5) or not key_numdot) and
-							(pai(6) or not (key_alt and key_num0));
+			pco(5) <= (pbi(0) or not key_ctrl) and
+						 (pbi(2) or not key_C) and
+						 (pbi(3) or not key_V) and
+						 (pbi(4) or not key_B) and
+						 (pbi(5) or not key_N) and
+						 (pbi(6) or not key_space) and
+						 (pbi(7) or not key_dot) and
+						 (pai(0) or not key_slash) and
+						 (pai(1) or not key_quote) and
+						 (pai(2) or not key_pi) and
+						 (pai(4) or not (not key_alt and key_num0)) and
+						 (pai(5) or not key_numdot) and
+						 (pai(6) or not (key_alt and key_num0));
 
 			if ps2_key(10) /= ps2_stb then
 				case ps2_key(8 downto 0) is
