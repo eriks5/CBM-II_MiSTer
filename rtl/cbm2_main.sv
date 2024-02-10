@@ -5,9 +5,8 @@ module cbm2_main (
    input         turbo,     // 1=2MHz CPU clock (Professional only)
    input   [1:0] ramSize,   // 0=64k, 1=128k, 2=1M
    input   [1:0] copro,     // 0=none, 1=8088
-
-   input   [7:0] extrom,
-   input         extram,
+   input   [3:1] extbankrom,
+   input   [3:0] extbankram,
 
    input         pause,
    output        pause_out,
@@ -54,7 +53,13 @@ module cbm2_main (
 
    output        sftlk_sense,
    output        hard_reset,
-   output        soft_reset
+   output        soft_reset,
+
+   input   [1:0] erase_sram,
+   input   [5:0] rom_id,
+   input  [13:0] rom_addr,
+   input         rom_wr,
+   input   [7:0] rom_data
 );
 
 typedef enum bit[4:0] {
@@ -172,7 +177,6 @@ reg        aec;
 reg        irq_vic;
 
 reg [15:0] vicAddr;
-reg  [3:0] colData;
 
 reg  [7:0] vicData;
 reg  [3:0] vicColorIndex;
@@ -181,14 +185,6 @@ reg        vicHSync;
 reg        vicVSync;
 
 reg [7:0]  vicR, vicG, vicB;
-
-spram #(4,10) colorram (
-   .clk(clk_sys),
-   .we(cs_colram && pulseWr_io),
-   .addr(systemAddr[9:0]),
-   .data(cpuDo[3:0]),
-   .q(colData)
-);
 
 video_vicii_656x #(
    .registeredAddress("true"),
@@ -219,8 +215,8 @@ video_vicii_656x #(
 
    .aRegisters(cpuAddr[5:0]),
    .diRegisters(cpuDo),
-   .di(vidDi),
-   .diColor(colData),
+   .di(vidDi[7:0]),
+   .diColor(vidDi[11:8]),
    .DO(vicData),
 
    .vicAddr(vicAddr[13:0]),
@@ -280,7 +276,12 @@ chargen chargen (
 
    .profile(profile),
    .dotA({crtcMa[12], crtcGraphics, vidDi[6:0], crtcRa[3:0]}),
-   .dotD(crtcDotD)
+   .dotD(crtcDotD),
+
+   .rom_id(rom_id),
+   .rom_addr(rom_addr),
+   .rom_wr(rom_wr),
+   .rom_data(rom_data)
 );
 
 reg        crtcOut;
@@ -672,37 +673,44 @@ cbm2_keyboard keyboard (
 // PLA, ROM and glue logic
 // ============================================================================
 
-reg [7:0] vidDi;
+reg [11:0] vidDi;
 
-reg       cs_ram;
-reg       cs_colram;
-reg       cs_vic;
-reg       cs_crtc;
-reg       cs_sid;
-reg       cs_ipcia;
-reg       cs_cia;
-reg       cs_acia;
-reg       cs_tpi1;
-reg       cs_tpi2;
+reg        cs_ram;
+reg        cs_vic;
+reg        cs_crtc;
+reg        cs_sid;
+reg        cs_ipcia;
+reg        cs_cia;
+reg        cs_acia;
+reg        cs_tpi1;
+reg        cs_tpi2;
 
-reg       procvid;
+reg        procvid;
 
 cbm2_buslogic buslogic (
    .model(model),
    .profile(profile),
    .ramSize(ramSize),
    .ipcEn(coproEn),
-   .extrom(extrom),
-   .extram(extram),
+
+   .extbankrom(extbankrom),
+   .extbankram(extbankram),
 
    .clk_sys(clk_sys),
    .reset(reset),
+
+   .erase_sram(erase_sram),
+   .rom_id(rom_id),
+   .rom_addr(rom_addr),
+   .rom_wr(rom_wr),
+   .rom_data(rom_data),
 
    .phase(phase),
 
    .cpuCycle(cpu_cycle),
    .cpuAddr(cpuAddr),
    .cpuSeg(cpuPO),
+   .cpuDo(cpuDo),
    .cpuDi(cpuDi),
    .cpuWe(cpuWe),
 
@@ -711,6 +719,7 @@ cbm2_buslogic buslogic (
    .crtcAddr(crtcMa),
    .vidDi(vidDi),
 
+   .dramon(dramon),
    .vicdotsel(vicdotsel),
    .statvid(statvid),
 
@@ -720,7 +729,6 @@ cbm2_buslogic buslogic (
    .ramData(ramData),
 
    .cs_ram(cs_ram),
-   .cs_colram(cs_colram),
    .cs_vic(cs_vic),
    .cs_crtc(cs_crtc),
    .cs_sid(cs_sid),
@@ -731,7 +739,6 @@ cbm2_buslogic buslogic (
    .cs_tpi2(cs_tpi2),
    .procvid(procvid),
 
-   .colData(colData),
    .vicData(vicData),
    .crtcData(crtcData),
    .sidData(sidData),

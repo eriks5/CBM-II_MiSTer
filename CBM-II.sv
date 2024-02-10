@@ -191,19 +191,19 @@ assign VGA_SCALER = 0;
 // 0         1         2         3          4         5         6
 // 01234567890123456789012345678901 23456789012345678901234567890123
 // 0123456789ABCDEFGHIJKLMNOPQRSTUV 0123456789ABCDEFGHIJKLMNOPQRSTUV
-// XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX XXXXXX
+// XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX XXXXXXXXXXXX
 
 `include "build_id.v"
 localparam CONF_STR = {
 	"CBM-II;;",
-	"F9,PRG;",
+	"FE,PRG;",
 	"-;",
 
 	"P1,Hardware;",
 	"P1O[4:2],System,730,720,710,630,620,610,500,Custom;",
 	"h0P1-;",
 	"h0P1O[6:5],Model,High Profile,Low Profile,Professional;",
-	"h0P1O[8:7],Co-processor,None,8088;",
+//	"h0P1O[8:7],Co-processor,None,8088;",
 	"h0P1O[10:9],RAM,256K,128K,1M;",
 	"H0H1P1-;",
 	"H1P1O[11],CPU Clock,1 MHz,2 MHz;",
@@ -212,8 +212,6 @@ localparam CONF_STR = {
 	"h6P1O[36],Swap Joysticks,No,Yes;",
 	"H1P1O[33:32],Pot 1/2,Joy 1 Fire 2/3,Mouse,Paddles 1/2;",
 	"H1P1O[35:34],Pot 3/4,Joy 2 Fire 2/3,Mouse,Paddles 3/4;",
-	"P1-;",
-	"P1O[24],Extra RAM Segment 15,Off,On;",
 	"P1-;",
 	"P1O[13],Release Keys on Reset,Yes,No;",
 	"P1O[14],Clear All RAM on Reset,Yes,No;",
@@ -230,17 +228,31 @@ localparam CONF_STR = {
 	"P2O[25],SID,6581,8580;",
 	"D4P2O[28:26],SID Filter,Default,Custom 1,Custom 2,Custom 3,Adjustable;",
 	"D4D5P2O[31:29],Fc Offset,0,1,2,3,4,5;",
-	"P2FCA,FLT,Load Custom Filters;",
+	"P2FCF,FLT,Load Custom Filters;",
 
-	"P3,Loadable ROM;",
-	"P3FC8,ROMBIN,Load Rom $1000              ;",
-  	"P3FC7,ROMBIN,Load Rom $2000              ;",
-  	"P3FC6,ROMBIN,Load Rom $4000              ;",
-  	"P3FC5,ROMBIN,Load Rom $6000              ;",
-  	"P3FC4,ROMBIN,Load Rom $8000 (Basic)      ;",
-   "H1P3FC3,ROMBIN,Load Rom $C000 (VIC Char)   ;",
-   "h1P3FC3,ROMBIN,Load Rom $C000              ;",
-   "P3FC2,ROMBIN,Load Rom $E000 (Kernal)     ;",
+	"P3,Loadable ROMs;",
+	"P3-,Model 500 ROMs;",
+	"P3FC2,ROMBIN, Load Basic                 ;",
+	"P3FC3,ROMBIN, Load Kernal                ;",
+	"P3FCB,ROMBIN, Load Charset               ;",
+	"P3-;",
+	"P3-,Model 6x0/7x0 ROMs;",
+	"P3FC4,ROMBIN, Load Basic 128             ;",
+	"P3FC5,ROMBIN, Load Basic 256             ;",
+	"P3FC6,ROMBIN, Load Kernal                ;",
+// "P3FC7,ROMBIN, Load Coprocessor Bios      ;",
+	"P3FCC,ROMBIN, Load Model 600 Charset     ;",
+	"P3FCD,ROMBIN, Load Model 700 Charset     ;",
+	"P3-;",
+	"P3-,External ROM/RAM;",
+   "P3O[24], Bank $1000,Disabled,RAM;",
+   "P3O[39:38], Bank $2000,Disabled,ROM,RAM;",
+	"h7P3FC8,ROMBIN,  Load Rom Bank $2000       ;",
+   "P3O[41:40], Bank $4000,Disabled,ROM,RAM;",
+	"h8P3FC9,ROMBIN,  Load Rom Bank $4000       ;",
+   "P3O[43:42], Bank $6000,Disabled,ROM,RAM;",
+	"h9P3FCA,ROMBIN,  Load Rom Bank $6000       ;",
+
 	"-;",
  	"R[0],Hard reset;",
 	"R[1],Soft reset;",
@@ -351,7 +363,8 @@ always @(posedge clk_sys) begin
 	integer   reset_counter;
 	reg [8:0] cfg_r;
 	reg       ntsc_r;
-	reg [1:0] do_erase = 2'd2;  // 0 - no erase, 1 - erase segment 15 only, 2 - erase all segments
+	reg       do_erase = 1;
+	reg [1:0] do_erase_sram = 2; // 0 - no, 1 - bank0 + vidram, 2 - all sram
 
 	cfg_r <= status[10:2];
 	ntsc_r <= ntsc;
@@ -359,24 +372,34 @@ always @(posedge clk_sys) begin
 	reset_n <= !reset_counter;
 
 	if (RESET || (cfg_r != status[10:2]) || status[0] || hard_reset || !pll_locked) begin
+		do_erase <= do_erase | status[14] | RESET;
+
 		if (RESET)
-			do_erase <= 2'd2;
+			do_erase_sram <= 2'd2;
 		else if (do_erase < 2)
-			do_erase <= status[14] ? 2'd1 : 2'd2;
+			do_erase_sram <= status[14] ? 2'd1 : 2'd2;
 
 		reset_counter <= 100000;
 	end
 	else if (ntsc_r != ntsc || status[1] || buttons[1] || soft_reset)
 		reset_counter <= 255;
-	else if (ioctl_download && (load_rom1 || load_rom2 || load_rom4 || load_rom6 || load_rom8 || (load_romC && model) || load_romE)) begin
-		do_erase <= status[14] ? 2'd1 : 2'd2;
+	else if (ioctl_download && load_rom) begin
+		do_erase <= status[14];
+		do_erase_sram <= status[14] ? 2'd1 : 2'd2;
 		reset_counter <= 255;
 	end
 	else if (erasing) force_erase <= 0;
-	else if (!reset_counter) do_erase <= 0;
+	else if (erasing_sram) force_erase_sram <= 0;
+	else if (!reset_counter) begin
+		do_erase <= 0;
+		do_erase_sram <= 0;
+	end
 	else if (reset_counter) begin
 		reset_counter <= reset_counter - 1;
-		if (reset_counter == 100) force_erase <= do_erase;
+		if (reset_counter == 100) begin
+			force_erase <= do_erase;
+			force_erase_sram <= do_erase_sram;
+		end
 	end
 end
 
@@ -412,6 +435,9 @@ hps_io #(.CONF_STR(CONF_STR)) hps_io
 
 	.status(status),
 	.status_menumask({
+		/* 9 */ status[42],
+		/* 8 */ status[40],
+		/* 7 */ status[38],
 		/* 6 */ joy_en,
 		/* 5 */ ~status[28],
 		/* 4 */ status[25],
@@ -447,15 +473,10 @@ hps_io #(.CONF_STR(CONF_STR)) hps_io
 	.ioctl_wait(ioctl_req_wr|reset_wait)
 );
 
-wire load_prg   = ioctl_index[5:0] == 9;
-wire load_rom1  = ioctl_index[5:0] == 8;
-wire load_rom2  = ioctl_index[5:0] == 7;
-wire load_rom4  = ioctl_index[5:0] == 6;
-wire load_rom6  = ioctl_index[5:0] == 5;
-wire load_rom8  = ioctl_index[5:0] == 4;
-wire load_romC  = ioctl_index[5:0] == 3;
-wire load_romE  = ioctl_index[5:0] == 2;
-wire load_flt   = ioctl_index[5:0] == 10;
+wire load_rom = ioctl_index[5:0] >= 2 && ioctl_index[5:0] < 11;
+wire load_chr = ioctl_index[5:0] >= 11 && ioctl_index[5:0] < 14;
+wire load_prg = ioctl_index[5:0] == 14;
+wire load_flt = ioctl_index[5:0] == 15;
 
 wire       model500 = status[4:2] == 6;
 wire       model6x0 = status[4:2] == 3 || status[4:2] == 4 || status[4:2] == 5;
@@ -476,7 +497,7 @@ wire       ntsc    = status[12] | model7x0;                               // 0=P
 // I/O
 // ========================================================================
 
-reg [1:0]  erasing, force_erase;  // 1 - erase segment 15 bank 0, 2 - erase all RAM
+reg        erasing, force_erase;
 
 reg [24:0] ioctl_load_addr;
 reg        ioctl_req_wr;
@@ -488,8 +509,6 @@ reg        io_cycle_ce;
 reg        io_cycle_we;
 reg [24:0] io_cycle_addr;
 reg  [7:0] io_cycle_data;
-
-reg  [7:0] rom_loaded = 0;
 
 always @(posedge clk_sys) begin
 	reg  [4:0] erase_to;
@@ -511,15 +530,11 @@ always @(posedge clk_sys) begin
 			ioctl_load_addr <= ioctl_load_addr + 1'b1;
 
 			if (erasing)
-				io_cycle_data <= &ioctl_load_addr[19:16] ? {8{ioctl_load_addr[6]}} : {8{ioctl_load_addr[14]^ioctl_load_addr[3]^ioctl_load_addr[2]}};
+				io_cycle_data <= {8{ioctl_load_addr[14]^ioctl_load_addr[3]^ioctl_load_addr[2]}};
 			else if (inj_meminit)
 				io_cycle_data <= inj_meminit_data;
-			else begin
+			else
 				io_cycle_data <= ioctl_data;
-
-				if (|ioctl_data && ~&ioctl_data && ioctl_load_addr[24:16] == 'h00F)
-					rom_loaded[ioctl_load_addr[15:13]] <= 1;
-			end
 		end
 	end
 
@@ -542,21 +557,6 @@ always @(posedge clk_sys) begin
 				ioctl_req_wr <= 1;
 				inj_end <= inj_end + 1'b1;
 			end
-		end
-
-		if (load_rom1 || load_rom2 || load_rom4 || load_rom6 || load_rom8 || load_romC || load_romE) begin
-			if (ioctl_addr == 0) begin
-				if (load_rom1) ioctl_load_addr <= 25'h00F_1000;
-				if (load_rom2) ioctl_load_addr <= 25'h00F_2000;
-				if (load_rom4) ioctl_load_addr <= 25'h00F_4000;
-				if (load_rom6) ioctl_load_addr <= 25'h00F_6000;
-				if (load_rom8) ioctl_load_addr <= 25'h00F_8000;
-				if (load_romC) ioctl_load_addr <= 25'h00F_C000;
-				if (load_romE) ioctl_load_addr <= 25'h00F_E000;
-				ioctl_req_wr <= 1;
-			end
-			else if (ioctl_load_addr[24:16] == 'h00F && ioctl_load_addr[15:12] != 'hD)
-				ioctl_req_wr <= 1;
 		end
 	end
 
@@ -594,7 +594,7 @@ always @(posedge clk_sys) begin
 
 	if (!erasing && force_erase) begin
 		erasing <= force_erase;
-		ioctl_load_addr <= force_erase == 1 ? 25'h0F_0000 : model ? 25'h01_0000 : 25'h00_0000;
+		ioctl_load_addr <= model ? 25'h01_0000 : 25'h00_0000;
 	end
 
 	if (erasing && !ioctl_req_wr) begin
@@ -604,27 +604,11 @@ always @(posedge clk_sys) begin
 		     ||(ramsize == 1 && model == 1 && ioctl_load_addr == 'h02_FFFF) // 128k B
 			  ||(ramsize == 0 && model == 0 && ioctl_load_addr == 'h03_FFFF) // 256k P
 			  ||(ramsize == 0 && model == 1 && ioctl_load_addr == 'h04_FFFF) // 256k B
+			  ||(ioctl_load_addr == 'h0E_FFFF)                               // 1M
 			)
-				ioctl_load_addr <= 'h0F_0000;
-
-			if (ioctl_load_addr == 'h0F_0FFF && erasing == 1)
 				erasing <= 0;
-			else if (ioctl_load_addr[24:12] == 'b0_1111_0001 && rom_loaded[0]) // F1000 .. F1FFF
-				ioctl_load_addr <= 25'h0F_2000;
-			else if (ioctl_load_addr[24:13] == 'b0_1111_001  && rom_loaded[1]) // F2000 .. F3FFF
-				ioctl_load_addr <= 25'h0F_4000;
-			else if (ioctl_load_addr[24:13] == 'b0_1111_010  && rom_loaded[2]) // F4000 .. F5FFF
-				ioctl_load_addr <= 25'h0F_6000;
-			else if (ioctl_load_addr[24:13] == 'b0_1111_011  && rom_loaded[3]) // F6000 .. F7FFF
-				ioctl_load_addr <= 25'h0F_C000;
-			else if (ioctl_load_addr[24:14] == 'b0_1111_10)                    // F8000 .. FBFFF
-				ioctl_load_addr <= 25'h0F_C000;
-			else if (ioctl_load_addr[24:12] == 'b0_1111_1100 && rom_loaded[5]) // FC000 .. FCFFF
-				ioctl_load_addr <= 25'h0F_D000;
-			else if (ioctl_load_addr < 'h0F_D7FF)
-				ioctl_req_wr <= 1;
 			else
-				erasing <= 0;
+				ioctl_req_wr <= 1;
 		end
 	end
 end
@@ -642,6 +626,33 @@ always @(posedge clk_sys) begin
 		end
 		else begin
 			sid_ld_data[7:0] <= ioctl_data;
+		end
+	end
+end
+
+// ========================================================================
+// Static RAM
+// ========================================================================
+
+reg  [1:0] erasing_sram, force_erase_sram;
+reg [12:0] erase_sram_addr;
+
+always @(posedge clk_sys) begin
+	reg [4:0] erase_to;
+
+	if (force_erase_sram) begin
+		erasing_sram <= force_erase_sram;
+		erase_sram_addr <= 0;
+		erase_to <= 0;
+	end
+
+	if (erasing_sram) begin
+		erase_to <= erase_to + 1'b1;
+		if (&erase_to) begin
+			if (erase_sram_addr == {erasing_sram[1],12'hFFF})
+				erasing_sram <= 0;
+			else
+				erase_sram_addr <= erase_sram_addr + 1'b1;
 		end
 	end
 end
@@ -743,9 +754,8 @@ cbm2_main main (
 	.turbo(status[11]),
 	.ramSize(ramsize),
 	.copro(copro),
-
-	.extrom(rom_loaded),
-	.extram(status[24]),
+	.extbankrom({status[42], status[40], status[38]}),
+	.extbankram({status[43], status[41], status[39], status[24]}),
 
 	.pause(freeze),
 	.pause_out(pause),
@@ -792,7 +802,13 @@ cbm2_main main (
 
 	.sftlk_sense(sftlk_sense),
 	.hard_reset(hard_reset),
-	.soft_reset(soft_reset)
+	.soft_reset(soft_reset),
+
+   .erase_sram(erasing_sram),
+	.rom_id  (!erasing_sram ? ioctl_index[5:0] : 0),
+	.rom_addr(!erasing_sram ? ioctl_addr : erase_sram_addr),
+	.rom_wr  (!erasing_sram ? ((load_rom || load_chr) && !ioctl_addr[24:14] && ioctl_download && ioctl_wr) : 1'b1),
+	.rom_data(!erasing_sram ? ioctl_data : {8{erase_sram_addr[6]}})
 );
 
 // ========================================================================
