@@ -3,7 +3,7 @@ module cbm2_main (
    input         profile,   // 0=Low, 1=High (Business only)
    input         ntsc,      // 0=PAL, 1=NTSC
    input         turbo,     // 1=2MHz CPU clock (Professional only)
-   input   [1:0] ramSize,   // 0=64k, 1=128k, 2=1M
+   input   [1:0] ramSize,   // 0=256k, 1=128k, 2=1M
    input   [1:0] copro,     // 0=none, 1=8088
    input   [3:1] extbankrom,
    input   [3:0] extbankram,
@@ -52,8 +52,6 @@ module cbm2_main (
    output [17:0] audio,
 
    output        sftlk_sense,
-   output        hard_reset,
-   output        soft_reset,
 
    input   [1:0] erase_sram,
    input   [5:0] rom_id,
@@ -65,7 +63,7 @@ module cbm2_main (
 typedef enum bit[4:0] {
 	CYCLE_EXT0, CYCLE_EXT1, CYCLE_EXT2, CYCLE_EXT3,
    CYCLE_CPU0, CYCLE_CPU1, CYCLE_CPU2, CYCLE_CPU3,
-   CYCLE_CPU4, CYCLE_CPU5, CYCLE_CPU6, CYCLE_CPU7,
+   CYCLE_EXT4, CYCLE_EXT5, CYCLE_EXT6, CYCLE_EXT7,
    CYCLE_VID0, CYCLE_VID1, CYCLE_VID2, CYCLE_VID3,
    CYCLE_VID4, CYCLE_VID5
 } sysCycle_t;
@@ -81,15 +79,14 @@ wire       sys2MHz = model | (turbo & ~(cs_vic | cs_sid));
 wire       coproEn = model & |copro;
 
 // IOCTL cycle
-assign io_cycle   = sysCycle >= CYCLE_EXT0 && sysCycle <= CYCLE_EXT3 && rfsh_cycle != 1 && (phase || !coproEn);
+assign io_cycle = (sysCycle >= CYCLE_EXT0 && sysCycle <= CYCLE_EXT3 && rfsh_cycle != 1)
+               || (sysCycle >= CYCLE_EXT4 && sysCycle <= CYCLE_EXT7);
 
 // Video cycle (VIC or CRTC)
-wire vid_cycle    = (sysCycle >= CYCLE_VID0 && sysCycle <= CYCLE_VID5);
+wire vid_cycle  = sysCycle >= CYCLE_VID0 && sysCycle <= CYCLE_VID5;
 
 // CPU cycle
-wire cpu_cycle    = (sysCycle >= CYCLE_CPU0 && sysCycle <= CYCLE_CPU3 && (phase || sys2MHz))
-                 || (sysCycle >= CYCLE_CPU4 && sysCycle <= CYCLE_CPU7 && coproEn)
-                 || (sysCycle >= CYCLE_EXT0 && sysCycle <= CYCLE_EXT3 && coproEn && !phase);
+wire cpu_cycle  = sysCycle >= CYCLE_CPU0 && sysCycle <= CYCLE_CPU3 && (phase || sys2MHz);
 
 wire enableVic  = sysCycle == CYCLE_VID3;
 wire enableCrtc = sysCycle == CYCLE_VID0.prev();
@@ -288,22 +285,18 @@ reg        crtcOut;
 
 always @(posedge clk_sys) begin
    reg [7:0] dot;
-   reg       crtcRevid, crtcRevid_r;
+   reg       crtcRevid;
    reg       crtcDE_r;
    reg       crtcCursor_r;
 
    if (enablePixel[0]) begin
-      crtcOut      <= crtcCursor_r ^ (crtcDE_r & (crtcRevid_r ^ dot[7]));
+      crtcOut      <= crtcCursor_r ^ (crtcDE_r & (crtcRevid ^ dot[7]));
       dot          <= {dot[6:0], dot[0] & crtcGraphics};
-   end
-
-   if (sysCycle == CYCLE_VID3) begin
-      crtcRevid    <= vidDi[7] ^ crtcMa[13];
    end
 
    if (sysCycle == CYCLE_VID5) begin
       dot          <= crtcDotD;
-      crtcRevid_r  <= crtcRevid;
+      crtcRevid    <= vidDi[7] ^ crtcMa[13];
       crtcDE_r     <= crtcDE;
       crtcCursor_r <= crtcCursor;
    end
@@ -664,8 +657,6 @@ cbm2_keyboard keyboard (
    .pbi(tpi2_pbo),
    .pco(tpi2_pci),
 
-   .hard_reset(hard_reset),
-   .soft_reset(soft_reset),
    .sftlk_sense(sftlk_sense)
 );
 

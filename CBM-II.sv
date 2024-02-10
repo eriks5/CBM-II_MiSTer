@@ -371,7 +371,7 @@ always @(posedge clk_sys) begin
 
 	reset_n <= !reset_counter;
 
-	if (RESET || (cfg_r != status[10:2]) || status[0] || hard_reset || !pll_locked) begin
+	if (RESET || (cfg_r != status[10:2]) || status[0] || !pll_locked) begin
 		do_erase <= do_erase | status[14] | RESET;
 
 		if (RESET)
@@ -381,7 +381,7 @@ always @(posedge clk_sys) begin
 
 		reset_counter <= 100000;
 	end
-	else if (ntsc_r != ntsc || status[1] || buttons[1] || soft_reset)
+	else if (ntsc_r != ntsc || status[1] || buttons[1])
 		reset_counter <= 255;
 	else if (ioctl_download && load_rom) begin
 		do_erase <= status[14];
@@ -740,9 +740,6 @@ wire        refresh;
 wire  [7:0] r, g, b;
 wire        hsync, vsync;
 
-wire        hard_reset;
-wire        soft_reset;
-
 wire [17:0] audio;
 
 cbm2_main main (
@@ -801,8 +798,6 @@ cbm2_main main (
 	.audio(audio),
 
 	.sftlk_sense(sftlk_sense),
-	.hard_reset(hard_reset),
-	.soft_reset(soft_reset),
 
    .erase_sram(erasing_sram),
 	.rom_id  (!erasing_sram ? ioctl_index[5:0] : 0),
