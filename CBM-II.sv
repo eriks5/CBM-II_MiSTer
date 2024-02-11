@@ -171,8 +171,8 @@ module emu
 	input         OSD_STATUS
 );
 
-assign ADC_BUS  = 'Z;
-assign USER_OUT = '1;
+assign ADC_BUS = 'Z;
+assign {USER_OUT[6], USER_OUT[1:0]} = '1;
 assign {UART_RTS, UART_TXD, UART_DTR} = 0;
 assign {DDRAM_CLK, DDRAM_BURSTCNT, DDRAM_ADDR, DDRAM_DIN, DDRAM_BE, DDRAM_RD, DDRAM_WE} = '0;
 assign {SD_SCK, SD_MOSI, SD_CS} = 'Z;
@@ -191,7 +191,7 @@ assign VGA_SCALER = 0;
 // 0         1         2         3          4         5         6
 // 01234567890123456789012345678901 23456789012345678901234567890123
 // 0123456789ABCDEFGHIJKLMNOPQRSTUV 0123456789ABCDEFGHIJKLMNOPQRSTUV
-// XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX XXXXXXXXXXXX
+// XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX XXXXXXXXXXXXXX
 
 `include "build_id.v"
 localparam CONF_STR = {
@@ -213,6 +213,9 @@ localparam CONF_STR = {
 	"H1P1O[33:32],Pot 1/2,Joy 1 Fire 2/3,Mouse,Paddles 1/2;",
 	"H1P1O[35:34],Pot 3/4,Joy 2 Fire 2/3,Mouse,Paddles 3/4;",
 	"P1-;",
+	"P1O[45],External IEC,Disabled,Enabled;",
+	"P1R[44],Reset Drive;",
+	"-;",
 	"P1O[13],Release Keys on Reset,Yes,No;",
 	"P1O[14],Clear All RAM on Reset,Yes,No;",
 	"P1O[15],Pause When OSD is Open,No,Yes;",
@@ -780,6 +783,12 @@ cbm2_main main (
 	.sid_cfg(status[27:26]),
 	.sid_fc_off(status[28] ? (13'h600 - {status[31:29],7'd0}) : 13'd0),
 
+	.iec_atn_o(cbm_iec_atn),
+	.iec_clk_o(cbm_iec_clk),
+	.iec_clk_i(ext_iec_clk),
+	.iec_data_o(cbm_iec_data),
+	.iec_data_i(ext_iec_data),
+
 	.ramAddr(cpu_addr),
 	.ramData(sdram_data),
 	.ramOut(cpu_out),
@@ -805,6 +814,19 @@ cbm2_main main (
 	.rom_wr  (!erasing_sram ? ((load_rom || load_chr) && !ioctl_addr[24:14] && ioctl_download && ioctl_wr) : 1'b1),
 	.rom_data(!erasing_sram ? ioctl_data : {8{erase_sram_addr[6]}})
 );
+
+// ========================================================================
+// External IEC
+// ========================================================================
+
+wire ext_iec_en   = status[45];
+wire ext_iec_clk  = USER_IN[2] | ~ext_iec_en;
+wire ext_iec_data = USER_IN[4] | ~ext_iec_en;
+
+assign USER_OUT[2] = cbm_iec_clk | ~ext_iec_en;
+assign USER_OUT[3] = (reset_n & ~status[44]) | ~ext_iec_en;
+assign USER_OUT[4] = cbm_iec_data | ~ext_iec_en;
+assign USER_OUT[5] = cbm_iec_atn | ~ext_iec_en;
 
 // ========================================================================
 // Video

@@ -34,6 +34,12 @@ module cbm2_main (
    input         sid_ld_data,
    input         sid_ld_wr,
 
+   output        iec_atn_o,
+   output        iec_clk_o,
+   input         iec_clk_i,
+   output        iec_data_o,
+   input         iec_data_i,
+
    output [24:0] ramAddr,
    input   [7:0] ramData,    // from sdram
    output  [7:0] ramOut,     // to sdram
@@ -470,6 +476,10 @@ mos6526 cia (
    .pb_in(cia_pbo & ~({joyb[3:0], joya[3:0]} & {8{joy_en}})),
    .pb_out(cia_pbo),
 
+   .flag_n(iec_data_i),
+   .sp_in('1),
+   .cnt_in('1),
+
    .tod(todclk),
    .irq_n(irq_cia)
 );
@@ -546,9 +556,10 @@ wire       talken = tpi1_pao[1];
 
 wire       dirctl = tpi1_pao[0];
 
-wire       cassw = tpi1_pbo[7];
-wire       cassmtr = tpi1_pbo[6];
-wire       casswrt = tpi1_pbo[5];
+assign     iec_atn_o  = ~tpi1_pbo[6];
+assign     iec_clk_o  = tpi1_pbo[7];
+assign     iec_data_o = tpi1_pbo[5];
+
 wire       dramon = tpi1_pbo[4];
 wire       srq_i = 1'b1;
 wire       srq_o = tpi1_pbo[1];
@@ -575,7 +586,7 @@ mos_tpi tpi1 (
    .pa_in(tpi1_pao & {nrfd_i, ndac_i, eoi_i, dav_i, atn_i, ren_i, 2'b11}),
    .pa_out(tpi1_pao),
 
-   .pb_in(tpi1_pbo & {6'b111111, srq_i, ifc_i}),
+   .pb_in(tpi1_pbo & {iec_clk_i, 1'b1, iec_data_i, 3'b111, srq_i, ifc_i}),
    .pb_out(tpi1_pbo),
 
    .pc_in(tpi1_pco & {3'b111, irq_acia, irq_ipcia, irq_cia, srq_i & srq_o, todclk}),
