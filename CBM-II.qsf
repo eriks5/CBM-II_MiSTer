@@ -297,6 +297,8 @@ set_instance_assignment -name IO_STANDARD "3.3-V LVTTL" -to LED_*
 set_instance_assignment -name IO_STANDARD "3.3-V LVTTL" -to BTN_*
 set_instance_assignment -name WEAK_PULL_UP_RESISTOR ON -to BTN_*
 source files.qip
+set_global_assignment -name QIP_FILE rtl/ieee_drive/ieee_drive.qip
+set_global_assignment -name VERILOG_FILE rtl/c1351.v
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/chargen.sv
 set_global_assignment -name VHDL_FILE rtl/mc6845.vhd
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/video_sync.sv
