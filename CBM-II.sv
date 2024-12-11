@@ -179,23 +179,37 @@ assign {SD_SCK, SD_MOSI, SD_CS} = 'Z;
 
 assign LED_DISK = 0;
 assign LED_POWER = 0;
-assign LED_USER = 0;
+assign LED_USER = |drive_led | ioctl_download;
 assign BUTTONS = 0;
 assign VGA_DISABLE = 0;
 assign VGA_SCALER = 0;
 
 //////////////////////////////////////////////////////////////////
 
+localparam NDRIVES=2;
+
 // Status Bit Map:
 //              Upper                          Lower
 // 0         1         2         3          4         5         6
 // 01234567890123456789012345678901 23456789012345678901234567890123
 // 0123456789ABCDEFGHIJKLMNOPQRSTUV 0123456789ABCDEFGHIJKLMNOPQRSTUV
-// XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX XXXXXXXXXXXXXX
+// XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX XXXXXXXXXXXXXXXXXXXX
 
 `include "build_id.v"
 localparam CONF_STR = {
 	"CBM-II;;",
+	"HAO[50],Drive #8 Type,8250,4040;",
+	"HAHCS0,D80D82, Mount #8.0;",
+	"HAHCS1,D80D82, Mount #8.1;",
+	"HAhCS0,D64, Mount #8.0;",
+	"HAhCS1,D64, Mount #8.1;",
+	"HA-;",
+	"HBO[51],Drive #9 Type,8250,4040;",
+	"HBHDS2,D80D82, Mount #9.0;",
+	"HBHDS3,D80D82, Mount #9.1;",
+	"HBhDS2,D64, Mount #9.0;",
+	"HBhDS3,D64, Mount #9.1;",
+	"HB-;",
 	"FE,PRG;",
 	"-;",
 
@@ -213,9 +227,11 @@ localparam CONF_STR = {
 	"H1P1O[33:32],Pot 1/2,Joy 1 Fire 2/3,Mouse,Paddles 1/2;",
 	"H1P1O[35:34],Pot 3/4,Joy 2 Fire 2/3,Mouse,Paddles 3/4;",
 	"P1-;",
-	"P1O[45],External IEC,Disabled,Enabled;",
-	"P1R[44],Reset Drive;",
-	"-;",
+	"P1O[47:46],Enable Drive #8,If Mounted,Always,Never;",
+	"P1O[49:48],Enable Drive #9,If Mounted,Always,Never;",
+	"P1O[45],Enable External IEC,No,Yes;",
+	"P1R[44],Reset Drives;",
+	"P1-;",
 	"P1O[13],Release Keys on Reset,Yes,No;",
 	"P1O[14],Clear All RAM on Reset,Yes,No;",
 	"P1O[15],Pause When OSD is Open,No,Yes;",
@@ -361,18 +377,20 @@ always @(posedge CLK_50M) begin
 end
 
 reg reset_n;
+reg sys_reset_n;
 reg reset_wait = 0;
 always @(posedge clk_sys) begin
 	integer   reset_counter;
 	reg [8:0] cfg_r;
 	reg       ntsc_r;
 	reg       do_erase = 1;
-	reg [1:0] do_erase_sram = 2; // 0 - no, 1 - bank0 + vidram, 2 - all sram
+	reg [1:0] do_erase_sram = 2; // 0 - no, 1 - seg 15 bank0+ vidram, 2 - all sram
 
 	cfg_r <= status[10:2];
 	ntsc_r <= ntsc;
 
 	reset_n <= !reset_counter;
+	sys_reset_n <= !(reset_counter && do_erase_sram);
 
 	if (RESET || (cfg_r != status[10:2]) || status[0] || !pll_locked) begin
 		do_erase <= do_erase | status[14] | RESET;
@@ -406,31 +424,46 @@ always @(posedge clk_sys) begin
 	end
 end
 
-wire [127:0] status;
+localparam NDU = NDRIVES*2;
 
-wire         forced_scandoubler;
+wire   [127:0] status;
 
-wire         ioctl_wr;
-wire  [24:0] ioctl_addr;
-wire   [7:0] ioctl_data;
-wire   [7:0] ioctl_index;
-wire         ioctl_download;
+wire           forced_scandoubler;
 
-wire  [24:0] ps2_mouse;
-wire  [10:0] ps2_key;
-wire   [2:0] ps2_kbd_led_status = {2'b00, sftlk_sense};
-wire   [2:0] ps2_kbd_led_use = 3'b001;
+wire           ioctl_wr;
+wire    [24:0] ioctl_addr;
+wire     [7:0] ioctl_data;
+wire     [7:0] ioctl_index;
+wire           ioctl_download;
 
-wire   [1:0] buttons;
-wire         sftlk_sense;
+wire    [31:0] sd_lba[NDU];
+wire     [5:0] sd_blk_cnt[NDU];
+wire [NDU-1:0] sd_rd;
+wire [NDU-1:0] sd_wr;
+wire [NDU-1:0] sd_ack;
+wire    [12:0] sd_buff_addr;
+wire     [7:0] sd_buff_dout;
+wire     [7:0] sd_buff_din[NDU];
+wire           sd_buff_wr;
+wire [NDU-1:0] img_mounted;
+wire    [31:0] img_size;
+wire           img_readonly;
 
-wire  [21:0] gamma_bus;
+wire    [24:0] ps2_mouse;
+wire    [10:0] ps2_key;
+wire     [2:0] ps2_kbd_led_status = {2'b00, sftlk_sense};
+wire     [2:0] ps2_kbd_led_use = 3'b001;
 
-wire         joy_en = ~model | (cfgcust & status[37]);
-wire  [15:0] joyA, joyB, joyC, joyD;
-wire   [7:0] pd1, pd2,pd3, pd4;
+wire     [1:0] buttons;
+wire           sftlk_sense;
 
-hps_io #(.CONF_STR(CONF_STR)) hps_io
+wire    [21:0] gamma_bus;
+
+wire           joy_en = ~model | (cfgcust & status[37]);
+wire    [15:0] joyA, joyB, joyC, joyD;
+wire     [7:0] pd1, pd2,pd3, pd4;
+
+hps_io #(.CONF_STR(CONF_STR), .VDNUM(NDU), .BLKSZ(1)) hps_io
 (
 	.clk_sys(clk_sys),
 	.HPS_BUS(HPS_BUS),
@@ -438,6 +471,10 @@ hps_io #(.CONF_STR(CONF_STR)) hps_io
 
 	.status(status),
 	.status_menumask({
+		/* D */ status[51], // drive #9 type
+		/* C */ status[50], // drive #8 type
+		/* B */ status[49], // drive #9 enabled
+		/* A */ status[47], // drive #8 enabled
 		/* 9 */ status[42],
 		/* 8 */ status[40],
 		/* 7 */ status[38],
@@ -452,6 +489,20 @@ hps_io #(.CONF_STR(CONF_STR)) hps_io
 	.buttons(buttons),
 	.forced_scandoubler(forced_scandoubler),
 	.gamma_bus(gamma_bus),
+
+	.sd_lba(sd_lba),
+	.sd_blk_cnt(sd_blk_cnt),
+	.sd_rd(sd_rd),
+	.sd_wr(sd_wr),
+	.sd_ack(sd_ack),
+
+	.sd_buff_addr(sd_buff_addr),
+	.sd_buff_dout(sd_buff_dout),
+	.sd_buff_din(sd_buff_din),
+	.sd_buff_wr(sd_buff_wr),
+	.img_mounted(img_mounted),
+	.img_size(img_size),
+	.img_readonly(img_readonly),
 
    .ps2_key(ps2_key),
 	.ps2_mouse(ps2_mouse),
@@ -734,8 +785,8 @@ wire        paddle_4_btn = status[36] ? joyB[7] : joyD[7];
 
 wire [24:0] cpu_addr;
 wire        cpu_ce;
-wire        cpu_we;
 wire  [7:0] cpu_out;
+wire        cpu_we;
 
 wire        pause;
 
@@ -744,6 +795,9 @@ wire  [7:0] r, g, b;
 wire        hsync, vsync;
 
 wire [17:0] audio;
+
+st_ieee_bus ieee_bus_te;
+st_ieee_bus ieee_bus_dc;
 
 cbm2_main main (
 	.CLK(CLK),
@@ -763,7 +817,7 @@ cbm2_main main (
 	.clk_sys(clk_sys),
 	.reset_n(reset_n),
 
-	.kbd_reset(~reset_n & ~status[13]),
+	.kbd_reset(~sys_reset_n & ~status[13]),
 	.ps2_key(ps2_key),
 
 	.joy_en(joy_en),
@@ -782,6 +836,9 @@ cbm2_main main (
 	.sid_ver(status[25]),
 	.sid_cfg(status[27:26]),
 	.sid_fc_off(status[28] ? (13'h600 - {status[31:29],7'd0}) : 13'd0),
+
+	.ieee_i(ieee_bus_te),
+	.ieee_o(ieee_bus_dc),
 
 	.iec_atn_o(cbm_iec_atn),
 	.iec_clk_o(cbm_iec_clk),
@@ -816,8 +873,64 @@ cbm2_main main (
 );
 
 // ========================================================================
+// IEEE
+// ========================================================================
+
+wire drive_reset = ~sys_reset_n | status[44];
+wire [1:0] drive_led;
+
+reg [3:0] drive_mounted = 0;
+always @(posedge clk_sys) begin 
+	if(img_mounted[0]) drive_mounted[0] <= |img_size;
+	if(img_mounted[1]) drive_mounted[1] <= |img_size;
+	if(img_mounted[2]) drive_mounted[2] <= |img_size;
+	if(img_mounted[3]) drive_mounted[3] <= |img_size;
+end
+
+ieee_drive #(.DRIVES(NDRIVES)) ieee_drive
+(
+	.CLK(CLK),
+
+	.clk_sys(clk_sys),
+	.reset({drive_reset | ((!status[49:48]) ? !drive_mounted[3:2] : status[49]),
+		     drive_reset | ((!status[47:46]) ? !drive_mounted[1:0] : status[47])}),
+
+	.pause(pause),
+
+	.led(drive_led),
+
+	.bus_i(ieee_bus_dc),
+	.bus_o(ieee_bus_te),
+
+	.sd_lba(sd_lba),
+	.sd_blk_cnt(sd_blk_cnt),
+	.sd_rd(sd_rd),
+	.sd_wr(sd_wr),
+	.sd_ack(sd_ack),
+	.sd_buff_addr(sd_buff_addr),
+	.sd_buff_dout(sd_buff_dout),
+	.sd_buff_din(sd_buff_din),
+	.sd_buff_wr(sd_buff_wr),
+
+	.drv_type({status[51], status[50]}),
+
+	.img_mounted(img_mounted),
+	.img_readonly(img_readonly),
+	.img_size(img_size)
+
+	// .rom_addr(load_rom ? (ioctl_addr[15:0] - 16'h4000) : {1'b1,ioctl_addr[14:0]}),
+	// .rom_data(ioctl_data),
+	// .rom_wr(((load_rom && ioctl_addr[16:14]) || load_c1581) && ioctl_download && ioctl_wr),
+	// .rom_std(status[14])
+);
+
+// ========================================================================
 // External IEC
 // ========================================================================
+
+wire cbm_iec_atn;
+wire cbm_iec_clk;
+wire cbm_iec_data;
 
 wire ext_iec_en   = status[45];
 wire ext_iec_clk  = USER_IN[2] | ~ext_iec_en;

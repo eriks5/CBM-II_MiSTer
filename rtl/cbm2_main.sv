@@ -1,69 +1,72 @@
 module cbm2_main (
-   input         model,     // 0=Professional, 1=Business
-   input         profile,   // 0=Low, 1=High (Business only)
-   input         ntsc,      // 0=PAL, 1=NTSC
-   input         turbo,     // 1=2MHz CPU clock (Professional only)
-   input   [1:0] ramSize,   // 0=256k, 1=128k, 2=1M
-   input   [1:0] copro,     // 0=none, 1=8088
-   input   [3:1] extbankrom,
-   input   [3:0] extbankram,
+   input              model,     // 0=Professional, 1=Business
+   input              profile,   // 0=Low, 1=High (Business only)
+   input              ntsc,      // 0=PAL, 1=NTSC
+   input              turbo,     // 1=2MHz CPU clock (Professional only)
+   input        [1:0] ramSize,   // 0=256k, 1=128k, 2=1M
+   input        [1:0] copro,     // 0=none, 1=8088
+   input        [3:1] extbankrom,
+   input        [3:0] extbankram,
 
-   input         pause,
-   output        pause_out,
+   input              pause,
+   output             pause_out,
 
-   input  [31:0] CLK,
-   input         clk_sys,
-   input         reset_n,
+   input       [31:0] CLK,
+   input              clk_sys,
+   input              reset_n,
 
-   input  [10:0] ps2_key,
-   input         kbd_reset,
+   input       [10:0] ps2_key,
+   input              kbd_reset,
 
-   input         joy_en,
-   input   [4:0] joya,
-   input   [4:0] joyb,
-   input   [7:0] pot1,
-   input   [7:0] pot2,
-   input   [7:0] pot3,
-   input   [7:0] pot4,
+   input              joy_en,
+   input        [4:0] joya,
+   input        [4:0] joyb,
+   input        [7:0] pot1,
+   input        [7:0] pot2,
+   input        [7:0] pot3,
+   input        [7:0] pot4,
 
-   input         sid_ver,
-   input   [1:0] sid_cfg,
-   input  [12:0] sid_fc_off,
-   input         sid_ld_clk,
-   input         sid_ld_addr,
-   input         sid_ld_data,
-   input         sid_ld_wr,
+   input              sid_ver,
+   input        [1:0] sid_cfg,
+   input       [12:0] sid_fc_off,
+   input              sid_ld_clk,
+   input              sid_ld_addr,
+   input              sid_ld_data,
+   input              sid_ld_wr,
 
-   output        iec_atn_o,
-   output        iec_clk_o,
-   input         iec_clk_i,
-   output        iec_data_o,
-   input         iec_data_i,
+   input  st_ieee_bus ieee_i,
+   output st_ieee_bus ieee_o,
 
-   output [24:0] ramAddr,
-   input   [7:0] ramData,    // from sdram
-   output  [7:0] ramOut,     // to sdram
-   output        ramCE,
-   output        ramWE,
+   output             iec_atn_o,
+   output             iec_clk_o,
+   output             iec_data_o,
+   input              iec_clk_i,
+   input              iec_data_i,
 
-   output        refresh,
-   output        io_cycle,
+   output      [24:0] ramAddr,
+   input        [7:0] ramData,    // from sdram
+   output       [7:0] ramOut,     // to sdram
+   output             ramCE,
+   output             ramWE,
 
-   output        hsync,
-   output        vsync,
-   output  [7:0] r,
-   output  [7:0] g,
-   output  [7:0] b,
+   output             refresh,
+   output             io_cycle,
 
-   output [17:0] audio,
+   output             hsync,
+   output             vsync,
+   output       [7:0] r,
+   output       [7:0] g,
+   output       [7:0] b,
 
-   output        sftlk_sense,
+   output      [17:0] audio,
 
-   input   [1:0] erase_sram,
-   input   [5:0] rom_id,
-   input  [13:0] rom_addr,
-   input         rom_wr,
-   input   [7:0] rom_data
+   output             sftlk_sense,
+
+   input        [1:0] erase_sram,
+   input        [5:0] rom_id,
+   input       [13:0] rom_addr,
+   input              rom_wr,
+   input        [7:0] rom_data
 );
 
 typedef enum bit[4:0] {
@@ -328,10 +331,10 @@ assign vsync = model ? crtcVsync : vicVSync;
 
 reg  [7:0] sidData;
 
-wire [7:0] pot_x1 = ~model & cia_pao[0] ? ~pot1 : 8'hff;
-wire [7:0] pot_y1 = ~model & cia_pao[0] ? ~pot2 : 8'hff;
-wire [7:0] pot_x2 = ~model & cia_pao[1] ? ~pot3 : 8'hff;
-wire [7:0] pot_y2 = ~model & cia_pao[1] ? ~pot4 : 8'hff;
+wire [7:0] pot_x1 = ~model & paddle[0] ? ~pot1 : 8'hff;
+wire [7:0] pot_y1 = ~model & paddle[0] ? ~pot2 : 8'hff;
+wire [7:0] pot_x2 = ~model & paddle[1] ? ~pot3 : 8'hff;
+wire [7:0] pot_y2 = ~model & paddle[1] ? ~pot4 : 8'hff;
 
 sid_top #(
    .DUAL(0)
@@ -450,11 +453,17 @@ always @(posedge clk_sys) begin
    end
 end
 
-wire       irq_cia;
-reg  [7:0] ciaData;
+wire         irq_cia;
+reg    [7:0] ciaData;
 
-reg  [7:0] cia_pao;
-reg  [7:0] cia_pbo;
+reg    [7:0] cia_pao;
+reg    [7:0] cia_pbo;
+
+wire   [7:0] joy_trig    = ~{joyb[4] & joy_en, joya[4] & joy_en, 6'b000000};
+wire   [7:0] joy_dir     = ~({joyb[3:0], joya[3:0]} & {8{joy_en}});
+wire   [1:0] paddle      = cia_pao[1:0] & (ieee_i.data[1:0] | {2{ieee_talken}});
+
+assign       ieee_o.data = (cia_pao & joy_trig) | {8{~ieee_talken}};
 
 mos6526 cia (
    .mode(0),
@@ -470,10 +479,10 @@ mos6526 cia (
    .db_in(cpuDo),
    .db_out(ciaData),
 
-   .pa_in(cia_pao & ~{joyb[4] & joy_en, joya[4] & joy_en, 6'b000000}),
+   .pa_in(cia_pao & joy_trig & (ieee_i.data | {8{ieee_talken}})),
    .pa_out(cia_pao),
 
-   .pb_in(cia_pbo & ~({joyb[3:0], joya[3:0]} & {8{joy_en}})),
+   .pb_in(cia_pbo & joy_dir),
    .pb_out(cia_pbo),
 
    .flag_n(iec_data_i),
@@ -540,36 +549,37 @@ wire [7:0] tpi1_pao;
 wire [7:0] tpi1_pbo;
 wire [7:0] tpi1_pco;
 
-wire       nrfd_i = 1'b1;
-wire       nrfd_o = tpi1_pao[7];
-wire       ndac_i = 1'b1;
-wire       ndac_o = tpi1_pao[6];
-wire       eoi_i = 1'b1;
-wire       eoi_o = tpi1_pao[5];
-wire       dav_i = 1'b1;
-wire       dav_o = tpi1_pao[4];
-wire       atn_i = 1'b1;
-wire       atn_o = tpi1_pao[3];
-wire       ren_i = 1'b1;
-wire       ren_o = tpi1_pao[2];
-wire       talken = tpi1_pao[1];
+wire       ieee_talken =  tpi1_pao[1];
+wire       ieee_dirctl =  tpi1_pao[0];
+wire       ieee_atn    =  tpi1_pao[3] & (~ieee_dirctl | ieee_i.atn);
+wire       ieee_eoidir = (ieee_atn & ieee_talken) | (~ieee_atn & ~ieee_dirctl);
 
-wire       dirctl = tpi1_pao[0];
+// DC  TE  ATN  EOI-DIR     ATN & TE    ~ATN & ~DC   EOI-DIR
+// H   H    H    H = T          H            L          H
+// H   H    L    L = R          L            L          L
+// L   L    H    L = R          L            L          L
+// L   L    L    H = T          L            H          H
+// H   L    X    L = R          L            L          L
+// L   H    X    H = T         ATN         ~ATN         H
 
-assign     iec_atn_o  = ~tpi1_pbo[6];
-assign     iec_clk_o  = tpi1_pbo[7];
-assign     iec_data_o = tpi1_pbo[5];
+assign     ieee_o.atn  =  ieee_dirctl | tpi1_pao[3];
+assign     ieee_o.eoi  = ~ieee_eoidir | tpi1_pao[5];
+assign     ieee_o.srq  = ~ieee_dirctl | (tpi1_pbo[1] & tpi1_pco[1]);
+assign     ieee_o.ren  =  ieee_dirctl | tpi1_pao[2];
+assign     ieee_o.ifc  =  ieee_dirctl | tpi1_pbo[0];
+assign     ieee_o.dav  = ~ieee_talken | tpi1_pao[4];
+assign     ieee_o.ndac =  ieee_talken | tpi1_pao[6];
+assign     ieee_o.nrfd =  ieee_talken | tpi1_pao[7];
 
-wire       dramon = tpi1_pbo[4];
-wire       srq_i = 1'b1;
-wire       srq_o = tpi1_pbo[1];
-wire       ifc_i = 1'b1;
-wire       ifc_o = tpi1_pbo[0];
+assign     iec_atn_o   = ~tpi1_pbo[6];
+assign     iec_clk_o   =  tpi1_pbo[7];
+assign     iec_data_o  =  tpi1_pbo[5];
+wire       dramon      =  tpi1_pbo[4];
 
-wire       irq_tpi1 = tpi1_pco[5];
-wire       statvid = tpi1_pco[6];
-wire       crtcGraphics = tpi1_pco[6];
-wire       vicdotsel = tpi1_pco[7];
+wire       irq_tpi1    =  tpi1_pco[5];
+wire       crtcGraphics=  tpi1_pco[6];
+wire       statvid     =  tpi1_pco[6];
+wire       vicdotsel   =  tpi1_pco[7];
 
 mos_tpi tpi1 (
    .mode(1),
@@ -583,13 +593,35 @@ mos_tpi tpi1 (
    .db_in(cpuDo),
    .db_out(tpi1Data),
 
-   .pa_in(tpi1_pao & {nrfd_i, ndac_i, eoi_i, dav_i, atn_i, ren_i, 2'b11}),
+   .pa_in(tpi1_pao & {
+      ~ieee_talken | ieee_i.nrfd,
+      ~ieee_talken | ieee_i.ndac,
+       ieee_eoidir | ieee_i.eoi,
+       ieee_talken | ieee_i.dav,
+      ~ieee_dirctl | ieee_i.atn,
+      ~ieee_dirctl | ieee_i.ren,
+      2'b11
+   }),
    .pa_out(tpi1_pao),
 
-   .pb_in(tpi1_pbo & {iec_clk_i, 1'b1, iec_data_i, 3'b111, srq_i, ifc_i}),
+   .pb_in(tpi1_pbo & {
+      iec_clk_i,
+      1'b1,
+      iec_data_i,
+      3'b111,
+      (ieee_dirctl | ieee_i.srq) & tpi1_pco[1],
+      ~ieee_dirctl | ieee_i.ifc
+   }),
    .pb_out(tpi1_pbo),
 
-   .pc_in(tpi1_pco & {3'b111, irq_acia, irq_ipcia, irq_cia, srq_i & srq_o, todclk}),
+   .pc_in(tpi1_pco & {
+      3'b111,
+      irq_acia,
+      irq_ipcia,
+      irq_cia,
+      (ieee_dirctl | ieee_i.srq) & tpi1_pbo[1],
+      todclk
+   }),
    .pc_out(tpi1_pco)
 );
 
