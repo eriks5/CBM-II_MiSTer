@@ -193,7 +193,7 @@ localparam NDRIVES=2;
 // 0         1         2         3          4         5         6
 // 01234567890123456789012345678901 23456789012345678901234567890123
 // 0123456789ABCDEFGHIJKLMNOPQRSTUV 0123456789ABCDEFGHIJKLMNOPQRSTUV
-// XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX XXXXXXXXXXXXXXXXXXXX
+// XXXXXXXXXXXXXXXXXXXXXXXXX XXXXXX XXXXXXXXXXXXXXXXXXXX
 
 `include "build_id.v"
 localparam CONF_STR = {
@@ -244,9 +244,8 @@ localparam CONF_STR = {
 	"d3P2O[21],Vertical Crop,No,Yes;",
 	"P2O[23:22],Scale,Normal,V-Integer,Narrower HV-Integer,Wider HV-Integer;",
 	"P2-;",
-	"P2O[25],SID,6581,8580;",
-	"D4P2O[28:26],SID Filter,Default,Custom 1,Custom 2,Custom 3,Adjustable;",
-	"D4D5P2O[31:29],Fc Offset,0,1,2,3,4,5;",
+	"P2O[28:26],SID Filter,Default,Custom 1,Custom 2,Custom 3,Adjustable;",
+	"D5P2O[31:29],Fc Offset,0,1,2,3,4,5;",
 	"P2FCF,FLT,Load Custom Filters;",
 
 	"P3,Loadable ROMs;",
@@ -480,7 +479,7 @@ hps_io #(.CONF_STR(CONF_STR), .VDNUM(NDU), .BLKSZ(1)) hps_io
 		/* 7 */ status[38],
 		/* 6 */ joy_en,
 		/* 5 */ ~status[28],
-		/* 4 */ status[25],
+		/* 4 */ 1'b0,
 		/* 3 */ |vcrop,
 		/* 2 */ model7x0,
 		/* 1 */ model,
@@ -833,7 +832,6 @@ cbm2_main main (
 	.sid_ld_addr(sid_ld_addr),
 	.sid_ld_data(sid_ld_data),
 	.sid_ld_wr(sid_ld_wr),
-	.sid_ver(status[25]),
 	.sid_cfg(status[27:26]),
 	.sid_fc_off(status[28] ? (13'h600 - {status[31:29],7'd0}) : 13'd0),
 

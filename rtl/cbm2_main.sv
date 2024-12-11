@@ -26,7 +26,6 @@ module cbm2_main (
    input        [7:0] pot3,
    input        [7:0] pot4,
 
-   input              sid_ver,
    input        [1:0] sid_cfg,
    input       [12:0] sid_fc_off,
    input              sid_ld_clk,
@@ -341,7 +340,7 @@ sid_top #(
 ) sid (
    .reset(reset),
    .clk(clk_sys),
-   .ce_1m(enableIO_p & phase),
+   .ce_1m(enableIO_p & (model | phase)),
    .we(pulseWr_io),
    .cs(cs_sid),
    .addr(cpuAddr[4:0]),
@@ -353,9 +352,9 @@ sid_top #(
 
    .audio_l(audio),
 
-   .ext_in_l({sid_ver, 17'd0}),
+   .ext_in_l(18'd0),
    .filter_en(1'b1),
-   .mode(sid_ver),
+   .mode(1'b0),
    .cfg(sid_cfg),
 
    .fc_offset_l(sid_fc_off),
