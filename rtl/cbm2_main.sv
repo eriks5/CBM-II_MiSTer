@@ -148,13 +148,14 @@ reg [7:0]  cpuPO;
 reg        cpuWe;
 reg [7:0]  cpuDi;
 reg [7:0]  cpuDo;
+reg        cpuSync;
 
 // ============================================================================
 // CPU
 // ============================================================================
 
 wire irq_n = irq_tpi1 & irq_vic;
-wire rdy   = model | baLoc | (statvid & ~procvid);
+wire rdy   = (model | baLoc | (statvid & ~procvid)) & refrdy;
 
 cpu_6509 cpu (
    .widePO(0),
@@ -169,9 +170,33 @@ cpu_6509 cpu (
    .din(cpuDi),
    .dout(cpuDo),
    .we(cpuWe),
+   .sync(cpuSync),
 
    .pout(cpuPO)
 );
+
+reg  [4:0] refen_cnt;
+reg        refrdy;
+reg        busy2_n = 1;
+reg        p2refgnt = 1;
+
+wire p2reffreq = refen_cnt == (model || turbo ? 20 : 10);
+wire refen     = ~(refrdy & p2refgnt);
+// wire refen_n   = model ? refrdy : ~refen;
+
+always @(posedge clk_sys) begin
+   if (enableIO_n && !p2reffreq)
+      refen_cnt <= refen_cnt + 1'b1;
+
+   if (refen)
+      refen_cnt <= 0;
+
+   if (enableIO_p)
+      refrdy <= ~(p2reffreq & cpuSync);
+
+   if (!busy2_n)
+      refrdy <= 1;
+end
 
 // ============================================================================
 // VIC-II
