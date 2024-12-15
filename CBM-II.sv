@@ -193,7 +193,7 @@ localparam NDRIVES=2;
 // 0         1         2         3          4         5         6
 // 01234567890123456789012345678901 23456789012345678901234567890123
 // 0123456789ABCDEFGHIJKLMNOPQRSTUV 0123456789ABCDEFGHIJKLMNOPQRSTUV
-// XXXXXXXXXXXXXXXXXXXXXXXXX XXXXXX XXXXXXXXXXXXXXXXXXXX
+// XXXXXXX  XXXXXXXXXXXXXXXX XXXXXX XXXXXXXXXXXXXXXXXXXX
 
 `include "build_id.v"
 localparam CONF_STR = {
@@ -214,18 +214,16 @@ localparam CONF_STR = {
 	"-;",
 
 	"P1,Hardware;",
-	"P1O[4:2],System,730,720,710,630,620,610,500,Custom;",
+	"P1O[4:2],System,P500,B610,B620,B710,B720,Custom;",
 	"h0P1-;",
-	"h0P1O[6:5],Model,High Profile,Low Profile,Professional;",
-//	"h0P1O[8:7],Co-processor,None,8088;",
-	"h0P1O[10:9],RAM,256K,128K,1M;",
-	"H0H1P1-;",
-	"H1P1O[11],CPU Clock,1 MHz,2 MHz;",
+	"h0P1O[6:5],Model,Professional,Business LP,Business HP;",
+	"h0H1P1O[11],CPU Clock,1 MHz,2 MHz;",
+	"h0P1O[10:9],RAM,128K,256K,896K;",
 	"h0h1P1-;H1h6P1-;",
 	"h0h1P1O[37],Enable Joysticks,No,Yes;",
+	"h6P1O[33:32],Pot 1/2,Joy 1 Fire 2/3,Mouse,Paddles 1/2;",
+	"h6P1O[35:34],Pot 3/4,Joy 2 Fire 2/3,Mouse,Paddles 3/4;",
 	"h6P1O[36],Swap Joysticks,No,Yes;",
-	"H1P1O[33:32],Pot 1/2,Joy 1 Fire 2/3,Mouse,Paddles 1/2;",
-	"H1P1O[35:34],Pot 3/4,Joy 2 Fire 2/3,Mouse,Paddles 3/4;",
 	"P1-;",
 	"P1O[47:46],Enable Drive #8,If Mounted,Always,Never;",
 	"P1O[49:48],Enable Drive #9,If Mounted,Always,Never;",
@@ -249,18 +247,17 @@ localparam CONF_STR = {
 	"P2FCF,FLT,Load Custom Filters;",
 
 	"P3,Loadable ROMs;",
-	"P3-,Model 500 ROMs;",
+	"P3-,Professional Model ROMs;",
 	"P3FC2,ROMBIN, Load Basic                 ;",
 	"P3FC3,ROMBIN, Load Kernal                ;",
-	"P3FCB,ROMBIN, Load Charset               ;",
+	"P3FCB,ROMBIN, Load VIC Charset           ;",
 	"P3-;",
-	"P3-,Model 6x0/7x0 ROMs;",
+	"P3-,Business Model ROMs;",
 	"P3FC4,ROMBIN, Load Basic 128             ;",
 	"P3FC5,ROMBIN, Load Basic 256             ;",
 	"P3FC6,ROMBIN, Load Kernal                ;",
-// "P3FC7,ROMBIN, Load Coprocessor Bios      ;",
-	"P3FCC,ROMBIN, Load Model 600 Charset     ;",
-	"P3FCD,ROMBIN, Load Model 700 Charset     ;",
+	"P3FCC,ROMBIN, Load Low Profile Charset   ;",
+	"P3FCD,ROMBIN, Load High Profiel Charset  ;",
 	"P3-;",
 	"P3-,External ROM/RAM;",
    "P3O[24], Bank $1000,Disabled,RAM;",
@@ -531,20 +528,19 @@ wire load_chr = ioctl_index[5:0] >= 11 && ioctl_index[5:0] < 14;
 wire load_prg = ioctl_index[5:0] == 14;
 wire load_flt = ioctl_index[5:0] == 15;
 
-wire       model500 = status[4:2] == 6;
-wire       model6x0 = status[4:2] == 3 || status[4:2] == 4 || status[4:2] == 5;
-wire       model7x0 = status[4:2] == 0 || status[4:2] == 1 || status[4:2] == 2;
-wire       modelx10 = status[4:2] == 2 || status[4:2] == 5;
-// wire    modelx20 = status[4:2] == 1 || status[4:2] == 4;
-wire       modelx30 = status[4:2] == 0 || status[4:2] == 3;
-wire       cfgcust  = status[4:2] == 7;
-
 // System configuration
-wire       model   = cfgcust ? ~status[6]    : model6x0|model7x0;         // 0=P, 1=B
-wire       profile = cfgcust ? ~|status[6:5] : model7x0;                  // 0=P/L, 1=H
-wire [1:0] copro   = cfgcust ? status[8:7]   : {1'b0, modelx30};          // 0=None, 1=8088, 2/3=reserved
-wire [1:0] ramsize = cfgcust ? status[10:9]  : {1'b0, model500|modelx10}; // 0=256k, 1=128k, 2=1M
-wire       ntsc    = status[12] | model7x0;                               // 0=PAL/50, 1=NTSC/60
+wire       model500 = status[4:2] == 0;
+// wire    model6x0 = status[4:2] == 1 || status[4:2] == 2;
+wire       model7x0 = status[4:2] == 3 || status[4:2] == 4;
+wire       modelx10 = status[4:2] == 0 || status[4:2] == 1 || status[4:2] == 3;
+// wire    modelx20 = status[4:2] == 2 || status[4:2] == 4;
+wire       cfgcust  = status[4:2] == 5;
+
+wire       model   = cfgcust ? |status[6:5] : ~model500;          // 0=P, 1=B
+wire       profile = cfgcust ? status[6]    : model7x0;           // 0=P/L, 1=H
+wire [1:0] ramsize = cfgcust ? status[10:9] : {1'b0, ~modelx10};  // 0=128k, 1=256k, 2=896k
+wire       cpu2MHz = cfgcust ? status[11]   : model;              // 0=1MHz, 1=2MHz
+wire       ntsc    = status[12] | model7x0;                       // 0=PAL/50, 1=NTSC/60
 
 // ========================================================================
 // I/O
@@ -653,10 +649,10 @@ always @(posedge clk_sys) begin
 	if (erasing && !ioctl_req_wr) begin
 		erase_to <= erase_to + 1'b1;
 		if (&erase_to) begin
-			if ((ramsize == 1 && model == 0 && ioctl_load_addr == 'h01_FFFF) // 128k P
-		     ||(ramsize == 1 && model == 1 && ioctl_load_addr == 'h02_FFFF) // 128k B
-			  ||(ramsize == 0 && model == 0 && ioctl_load_addr == 'h03_FFFF) // 256k P
-			  ||(ramsize == 0 && model == 1 && ioctl_load_addr == 'h04_FFFF) // 256k B
+			if ((ramsize == 0 && model == 0 && ioctl_load_addr == 'h01_FFFF) // 128k P
+		     ||(ramsize == 0 && model == 1 && ioctl_load_addr == 'h02_FFFF) // 128k B
+			  ||(ramsize == 1 && model == 0 && ioctl_load_addr == 'h03_FFFF) // 256k P
+			  ||(ramsize == 1 && model == 1 && ioctl_load_addr == 'h04_FFFF) // 256k B
 			  ||(ioctl_load_addr == 'h0E_FFFF)                               // 1M
 			)
 				erasing <= 0;
@@ -804,9 +800,8 @@ cbm2_main main (
 	.model(model),
 	.profile(profile),
 	.ntsc(ntsc),
-	.turbo(status[11]),
+	.cpu2MHz(cpu2MHz),
 	.ramSize(ramsize),
-	.copro(copro),
 	.extbankrom({status[42], status[40], status[38]}),
 	.extbankram({status[43], status[41], status[39], status[24]}),
 

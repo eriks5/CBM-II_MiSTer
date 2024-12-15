@@ -1,7 +1,7 @@
 module cbm2_buslogic (
    input         model,     // 0=Professional, 1=Business
    input         profile,   // 0=Low, 1=High
-   input   [1:0] ramSize,   // 0=256k, 1=128k, 2=1M
+   input   [1:0] ramSize,   // 0=128k, 1=256k, 2=896k
    input         ipcEn,     // Enable IPC
 
    input   [3:1] extbankrom,// enable external ROM in bank 2000,4000,6000
@@ -314,9 +314,9 @@ always @(*) begin
       end
       else if (dramon)
          case (ramSize)
-               0: cs_ram <= !model ? cpuSeg<=3 : cpuSeg>=1 && cpuSeg<=4;  // 256k
-               1: cs_ram <= !model ? cpuSeg<=1 : cpuSeg>=1 && cpuSeg<=2;  // 128k
-         default: cs_ram <= !model || cpuSeg>=1;                          // 1M
+               0: cs_ram <= !model ? cpuSeg<=1 : cpuSeg>=1 && cpuSeg<=2;  // 128k
+               1: cs_ram <= !model ? cpuSeg<=3 : cpuSeg>=1 && cpuSeg<=4;  // 256k
+         default: cs_ram <= 1;                                            // Full
          endcase
    end
 
@@ -380,7 +380,7 @@ always @(*) begin
       else if (cs_bank6)
          cpuDi <= bank6Data;
       else if (cs_rom8)
-         cpuDi <= model ? (ramSize == 1 ? romLB128Data : romLB256Data) : romLPData;
+         cpuDi <= model ? (ramSize == 0 ? romLB128Data : romLB256Data) : romLPData;
       else if (cs_romC && !model)
          cpuDi <= romCPData;
       else if (cs_romE)

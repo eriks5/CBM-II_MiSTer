@@ -2,9 +2,9 @@ module cbm2_main (
    input              model,     // 0=Professional, 1=Business
    input              profile,   // 0=Low, 1=High (Business only)
    input              ntsc,      // 0=PAL, 1=NTSC
-   input              turbo,     // 1=2MHz CPU clock (Professional only)
-   input        [1:0] ramSize,   // 0=256k, 1=128k, 2=1M
-   input        [1:0] copro,     // 0=none, 1=8088
+   input              cpu2MHz,   // 0=1MHz, 1=2MHz CPU
+   input        [1:0] ramSize,   // 0=128k, 1=256k, 2=896k
+   input        [1:0] copro,
    input        [3:1] extbankrom,
    input        [3:0] extbankram,
 
@@ -82,8 +82,8 @@ wire [4:0] PHASE_END   = model ? sysCycle_t.last() : CYCLE_VID3;
 sysCycle_t sysCycle, preCycle;
 reg        reset = 0;
 reg        sysEnable;
+reg        sys2MHz;
 
-wire       sys2MHz = model | (turbo & ~(cs_vic | cs_sid));
 wire       coproEn = model & |copro;
 
 // IOCTL cycle
@@ -94,13 +94,15 @@ assign io_cycle = (sysCycle >= CYCLE_EXT0 && sysCycle <= CYCLE_EXT3 && rfsh_cycl
 wire vid_cycle  = sysCycle >= CYCLE_VID0 && sysCycle <= CYCLE_VID5;
 
 // CPU cycle
-wire cpu_cycle  = sysCycle >= CYCLE_CPU0 && sysCycle <= CYCLE_CPU3 && (phase || sys2MHz);
+wire cpuPhase   = phase | (sys2MHz & (model | ~(cs_vic | cs_sid)));
+
+wire cpu_cycle  = sysCycle >= CYCLE_CPU0 && sysCycle <= CYCLE_CPU3 && cpuPhase;
 
 wire enableVic  = sysCycle == CYCLE_VID3;
 wire enableCrtc = sysCycle == CYCLE_VID0.prev();
-wire enableIO_n = sysCycle == CYCLE_CPU2        && (phase || sys2MHz);
-wire enableIO_p = sysCycle == CYCLE_CPU3.next() && (phase || sys2MHz);
-wire enableCpu  = sysCycle == CYCLE_CPU3        && (phase || sys2MHz);
+wire enableIO_n = sysCycle == CYCLE_CPU2        && cpuPhase;
+wire enableIO_p = sysCycle == CYCLE_CPU3.next() && cpuPhase;
+wire enableCpu  = sysCycle == CYCLE_CPU3        && cpuPhase;
 wire pulseWr_io = enableCpu && cpuWe;
 
 // assign ramWE = cpuWe && cpu_cycle;
@@ -126,7 +128,8 @@ always @(posedge clk_sys) begin
 
       if (rfsh_cycle == 0) begin
          sysEnable <= ~pause;
-         refresh <= 1;
+         sys2MHz   <= cpu2MHz;
+         refresh   <= 1;
       end
 
       reset <= ~reset_n;
@@ -155,7 +158,7 @@ reg        cpuSync;
 // ============================================================================
 
 wire irq_n = irq_tpi1 & irq_vic;
-wire rdy   = (model | baLoc | (statvid & ~procvid)) & refrdy;
+wire rdy   = vicrdy & refrdy;
 
 cpu_6509 cpu (
    .widePO(0),
@@ -180,7 +183,7 @@ reg        refrdy;
 reg        busy2_n = 1;
 reg        p2refgnt = 1;
 
-wire p2reffreq = refen_cnt == (model || turbo ? 20 : 10);
+wire p2reffreq = refen_cnt == (sys2MHz ? 20 : 10);
 wire refen     = ~(refrdy & p2refgnt);
 // wire refen_n   = model ? refrdy : ~refen;
 
@@ -215,6 +218,8 @@ reg        vicHSync;
 reg        vicVSync;
 
 reg [7:0]  vicR, vicG, vicB;
+
+wire       vicrdy = model | baLoc | (statvid & ~procvid);
 
 video_vicii_656x #(
    .registeredAddress("true"),
@@ -403,25 +408,25 @@ sid_top #(
 //    PRB7 = UNUSED
 // ============================================================================
 
-wire       irq_ipcia;
-reg [7:0]  ipciaData;
+wire       irq_ipcia = 0;
+reg [7:0]  ipciaData = 0;
 
-mos6526 ipcia (
-   .mode(0),
+// mos6526 ipcia (
+//    .mode(0),
 
-   .clk(clk_sys),
-   .phi2_p(enableIO_p),
-   .phi2_n(enableIO_n),
-   .res_n(~reset & coproEn),
-   .cs_n(~cs_ipcia),
-   .rw(~cpuWe),
+//    .clk(clk_sys),
+//    .phi2_p(enableIO_p),
+//    .phi2_n(enableIO_n),
+//    .res_n(~reset & coproEn),
+//    .cs_n(~cs_ipcia),
+//    .rw(~cpuWe),
 
-   .rs(cpuAddr[3:0]),
-   .db_in(cpuDo),
-   .db_out(ipciaData),
+//    .rs(cpuAddr[3:0]),
+//    .db_in(cpuDo),
+//    .db_out(ipciaData),
 
-   .irq_n(irq_ipcia)
-);
+//    .irq_n(irq_ipcia)
+// );
 
 // ============================================================================
 // 6526 CIA  COMPLEX INTERFACE ADAPTER -- GAME / IEEE DATA / USER
