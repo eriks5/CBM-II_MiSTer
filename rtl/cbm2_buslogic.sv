@@ -75,7 +75,7 @@ rom_mem #(8,13) bank_2000
    .clock_b(clk_sys),
    .address_b(rom_addr),
    .data_b(rom_data),
-   .wren_b(rom_wr && (extbankram[1] ? erase_sram[1] : rom_id==8 && !rom_addr[13]))
+   .wren_b(rom_wr && (extbankram[1] ? erase_sram[1] : rom_id==3 && !rom_addr[13]))
 );
 
 wire [7:0] bank4Data;
@@ -90,7 +90,7 @@ rom_mem #(8,13) bank_4000
    .clock_b(clk_sys),
    .address_b(rom_addr),
    .data_b(rom_data),
-   .wren_b(rom_wr && (extbankram[2] ? erase_sram[1] : ((rom_id==9 && !rom_addr[13]) || (rom_id==8 && rom_addr[13]))))
+   .wren_b(rom_wr && (extbankram[2] ? erase_sram[1] : ((rom_id==4 && !rom_addr[13]) || (rom_id==3 && rom_addr[13]))))
 );
 
 wire [7:0] bank6Data;
@@ -105,7 +105,7 @@ rom_mem #(8,13) bank_6000
    .clock_b(clk_sys),
    .address_b(rom_addr),
    .data_b(rom_data),
-   .wren_b(rom_wr && (extbankram[3] ? erase_sram[1] : ((rom_id==10 && !rom_addr[13]) || (rom_id==9 && rom_addr[13]))))
+   .wren_b(rom_wr && (extbankram[3] ? erase_sram[1] : ((rom_id==5 && !rom_addr[13]) || (rom_id==4 && rom_addr[13]))))
 );
 
 wire [7:0] romLPData;
@@ -115,10 +115,10 @@ rom_mem #(8,14,"rtl/roms/basic.901235+6-02.mif") rom_lang_p
    .address_a(systemAddr),
    .q_a(romLPData),
 
-   .clock_b(clk_sys),
-   .address_b(rom_addr),
-   .data_b(rom_data),
-   .wren_b(rom_wr & rom_id==2)
+   .clock_b(clk_sys)
+   // .address_b(rom_addr),
+   // .data_b(rom_data),
+   // .wren_b(rom_wr & rom_id==2)
 );
 
 wire [7:0] romLB128Data;
@@ -128,10 +128,10 @@ rom_mem #(8,14,"rtl/roms/basic.901242+3-04a.mif") rom_lang_b128
    .address_a(systemAddr),
    .q_a(romLB128Data),
 
-   .clock_b(clk_sys),
-   .address_b(rom_addr),
-   .data_b(rom_data),
-   .wren_b(rom_wr & rom_id==4)
+   .clock_b(clk_sys)
+   // .address_b(rom_addr),
+   // .data_b(rom_data),
+   // .wren_b(rom_wr & rom_id==4)
 );
 
 wire [7:0] romLB256Data;
@@ -141,10 +141,10 @@ rom_mem #(8,14,"rtl/roms/basic-901240+1-03.mif") rom_lang_b256
    .address_a(systemAddr),
    .q_a(romLB256Data),
 
-   .clock_b(clk_sys),
-   .address_b(rom_addr),
-   .data_b(rom_data),
-   .wren_b(rom_wr & rom_id==5)
+   .clock_b(clk_sys)
+   // .address_b(rom_addr),
+   // .data_b(rom_data),
+   // .wren_b(rom_wr & rom_id==5)
 );
 
 wire [7:0] romCPData;
@@ -154,10 +154,10 @@ rom_mem #(8,12,"rtl/roms/characters.901225-01.mif") rom_char_p
    .address_a(systemAddr),
    .q_a(romCPData),
 
-   .clock_b(clk_sys),
-   .address_b(rom_addr),
-   .data_b(rom_data),
-   .wren_b(rom_wr & rom_id==11 & !rom_addr[13:12])
+   .clock_b(clk_sys)
+   // .address_b(rom_addr),
+   // .data_b(rom_data),
+   // .wren_b(rom_wr & rom_id==11 & !rom_addr[13:12])
 );
 
 wire [7:0] romKPData;
@@ -167,10 +167,10 @@ rom_mem #(8,13,"rtl/roms/kernal.901234-02.mif") rom_kernal_p
    .address_a(systemAddr),
    .q_a(romKPData),
 
-   .clock_b(clk_sys),
-   .address_b(rom_addr),
-   .data_b(rom_data),
-   .wren_b(rom_wr & rom_id==3 & !rom_addr[13])
+   .clock_b(clk_sys)
+   // .address_b(rom_addr),
+   // .data_b(rom_data),
+   // .wren_b(rom_wr & rom_id==3 & !rom_addr[13])
 );
 
 wire [7:0] romKBData;
@@ -180,10 +180,10 @@ rom_mem #(8,13,"rtl/roms/kernal.901244-04a.mif") rom_kernal_b
    .address_a(systemAddr),
    .q_a(romKBData),
 
-   .clock_b(clk_sys),
-   .address_b(rom_addr),
-   .data_b(rom_data),
-   .wren_b(rom_wr & rom_id==6 & !rom_addr[13])
+   .clock_b(clk_sys)
+   // .address_b(rom_addr),
+   // .data_b(rom_data),
+   // .wren_b(rom_wr & rom_id==6 & !rom_addr[13])
 );
 
 wire [7:0] sramData;

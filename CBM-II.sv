@@ -210,7 +210,7 @@ localparam CONF_STR = {
 	"HBhDS2,D64, Mount #9.0;",
 	"HBhDS3,D64, Mount #9.1;",
 	"HB-;",
-	"FE,PRG;",
+	"F2,PRG;",
 	"-;",
 
 	"P1,Hardware;",
@@ -244,29 +244,16 @@ localparam CONF_STR = {
 	"P2-;",
 	"P2O[28:26],SID Filter,Default,Custom 1,Custom 2,Custom 3,Adjustable;",
 	"D5P2O[31:29],Fc Offset,0,1,2,3,4,5;",
-	"P2FCF,FLT,Load Custom Filters;",
+	"P2FC9,FLT,Load Custom Filters;",
 
-	"P3,Loadable ROMs;",
-	"P3-,Professional Model ROMs;",
-	"P3FC2,ROMBIN, Load Basic                 ;",
-	"P3FC3,ROMBIN, Load Kernal                ;",
-	"P3FCB,ROMBIN, Load VIC Charset           ;",
-	"P3-;",
-	"P3-,Business Model ROMs;",
-	"P3FC4,ROMBIN, Load Basic 128             ;",
-	"P3FC5,ROMBIN, Load Basic 256             ;",
-	"P3FC6,ROMBIN, Load Kernal                ;",
-	"P3FCC,ROMBIN, Load Low Profile Charset   ;",
-	"P3FCD,ROMBIN, Load High Profiel Charset  ;",
-	"P3-;",
-	"P3-,External ROM/RAM;",
+	"P3,External ROM/RAM;",
    "P3O[24], Bank $1000,Disabled,RAM;",
    "P3O[39:38], Bank $2000,Disabled,ROM,RAM;",
-	"h7P3FC8,ROMBIN,  Load Rom Bank $2000       ;",
+	"h7P3FC3,ROMBIN,  Load Rom Bank $2000       ;",
    "P3O[41:40], Bank $4000,Disabled,ROM,RAM;",
-	"h8P3FC9,ROMBIN,  Load Rom Bank $4000       ;",
+	"h8P3FC4,ROMBIN,  Load Rom Bank $4000       ;",
    "P3O[43:42], Bank $6000,Disabled,ROM,RAM;",
-	"h9P3FCA,ROMBIN,  Load Rom Bank $6000       ;",
+	"h9P3FC5,ROMBIN,  Load Rom Bank $6000       ;",
 
 	"-;",
  	"R[0],Hard reset;",
@@ -523,10 +510,9 @@ hps_io #(.CONF_STR(CONF_STR), .VDNUM(NDU), .BLKSZ(1)) hps_io
 	.ioctl_wait(ioctl_req_wr|reset_wait)
 );
 
-wire load_rom = ioctl_index[5:0] >= 2 && ioctl_index[5:0] < 11;
-wire load_chr = ioctl_index[5:0] >= 11 && ioctl_index[5:0] < 14;
-wire load_prg = ioctl_index[5:0] == 14;
-wire load_flt = ioctl_index[5:0] == 15;
+wire load_prg = ioctl_index[5:0] == 2;
+wire load_rom = ioctl_index[5:0] >= 3 && ioctl_index[5:0] < 9;
+wire load_flt = ioctl_index[5:0] == 9;
 
 // System configuration
 wire       model500 = status[4:2] == 0;
@@ -653,7 +639,7 @@ always @(posedge clk_sys) begin
 		     ||(ramsize == 0 && model == 1 && ioctl_load_addr == 'h02_FFFF) // 128k B
 			  ||(ramsize == 1 && model == 0 && ioctl_load_addr == 'h03_FFFF) // 256k P
 			  ||(ramsize == 1 && model == 1 && ioctl_load_addr == 'h04_FFFF) // 256k B
-			  ||(ioctl_load_addr == 'h0E_FFFF)                               // 1M
+			  ||(ioctl_load_addr == 'h0E_FFFF)                               // full
 			)
 				erasing <= 0;
 			else
@@ -861,7 +847,7 @@ cbm2_main main (
    .erase_sram(erasing_sram),
 	.rom_id  (!erasing_sram ? ioctl_index[5:0] : 0),
 	.rom_addr(!erasing_sram ? ioctl_addr : erase_sram_addr),
-	.rom_wr  (!erasing_sram ? ((load_rom || load_chr) && !ioctl_addr[24:14] && ioctl_download && ioctl_wr) : 1'b1),
+	.rom_wr  (!erasing_sram ? (load_rom && !ioctl_addr[24:14] && ioctl_download && ioctl_wr) : 1'b1),
 	.rom_data(!erasing_sram ? ioctl_data : {8{erase_sram_addr[6]}})
 );
 
@@ -910,11 +896,6 @@ ieee_drive #(.DRIVES(NDRIVES)) ieee_drive
 	.img_mounted(img_mounted),
 	.img_readonly(img_readonly),
 	.img_size(img_size)
-
-	// .rom_addr(load_rom ? (ioctl_addr[15:0] - 16'h4000) : {1'b1,ioctl_addr[14:0]}),
-	// .rom_data(ioctl_data),
-	// .rom_wr(((load_rom && ioctl_addr[16:14]) || load_c1581) && ioctl_download && ioctl_wr),
-	// .rom_std(status[14])
 );
 
 // ========================================================================
