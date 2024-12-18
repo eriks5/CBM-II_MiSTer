@@ -243,7 +243,7 @@ begin
 						 (pai(6) or not key_num6) and
 						 (pai(7) or not key_numplus);
 
-			pco(4) <= (pbi(0) or not key_shift) and
+			pco(4) <= (pbi(0) or not (key_shift or key_ins)) and
 						 (pbi(1) or not key_Z) and
 						 (pbi(2) or not key_X) and
 						 (pbi(3) or not key_F) and
