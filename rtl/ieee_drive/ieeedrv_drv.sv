@@ -1,3 +1,18 @@
+/*
+ * Commodore 4040/8250 IEEE drive implementation
+ *
+ * Copyright (C) 2024, Erik Scheffers
+ *
+ * This file is part of CBM-II_MiSTer.
+ *
+ * This program is free software: you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, version 2.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program. If not, see <https://www.gnu.org/licenses/>.
+ */
+ 
 module ieeedrv_drv #(parameter SUBDRV=2)
 (
    input       [31:0] CLK,

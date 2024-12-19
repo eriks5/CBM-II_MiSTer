@@ -1,3 +1,18 @@
+/*
+ * CBM-II FPGA implementation
+ *
+ * Copyright (C) 2024, Erik Scheffers (https://github.com/eriks5)
+ *
+ * This file is part of CBM-II_MiSTer.
+ *
+ * This program is free software: you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, version 2.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program. If not, see <https://www.gnu.org/licenses/>.
+ */
+
 module cbm2_main (
    input              model,     // 0=Professional, 1=Business
    input              profile,   // 0=Low, 1=High (Business only)
