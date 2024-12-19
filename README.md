@@ -1,6 +1,6 @@
-# CBM-II for [MiSTer](https://github.com/MiSTer-devel/Main_MiSTer/wiki)
+# [CBM-II](https://github.com/eriks5/CBM-II_MiSTer/) for [MiSTer](https://github.com/MiSTer-devel/Main_MiSTer/wiki)
 
-MiSTer FPGA core for the [Commodore CBM-II line of 8-bit computers](http://www.6502.org/users/sjgray/computer/cbm2/)
+MiSTer FPGA core for the [Commodore CBM-II line of 8-bit computers](http://cbmsteve.ca/cbm2/index.html)
 (aka. PET-II, P128, B128, B256, P500/B600/B700 series)
 
 ![](b3.jpg)
