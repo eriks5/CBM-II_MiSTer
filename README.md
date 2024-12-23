@@ -9,11 +9,11 @@ MiSTer FPGA core for the [Commodore CBM-II line of 8-bit computers](http://cbmst
 
 * Business (80-column monochrome) and Professional (40 column colour with VIC-II) models
 * 128kB, 256kB or full memory (~1MB) options
-* VIC-II (P500 model) or 6545 CRTC (P600/P700 models) video
+* VIC-II (P500 model) or 6545 CRTC (B600/B700 models) video
 * SID audio
 * Predefined and custom model configurations
 * Direct file injection (*.PRG)
-* Joystick/paddle/mouse support (B500 model)
+* Joystick/paddle/mouse support (P500 model)
 * 4040/8250 IEEE disk drives (supporting D64, D80 and D82 disk images)
 * Optional external RAM in segment 15.
 * Optional external ROM at location $2000, $4000 and $6000 in segment 15.
