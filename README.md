@@ -28,7 +28,7 @@ This core could not exist without the following projects:
 * VIC-II, from FPGA64 by Peter Wendrich (pwsoft@syntiac.com)
 * MC6845, from BBC Micro for Altera DE1 (c) 2011 Mike Stirling
 * SID, from C64_MiSTer by Sorgelig
-* VIA6522, by Gideon Zweijtzer \<gideon.zweijtzer@gmail.com\>
+* VIA6522, (C) 2011, Thomas Skibo
 * MOS6526, by Rayne
 * M6532, from k7800 (c) by Jamie Blanks
 * MOS6551, from CoCo3FPGA (c) 2008 Gary Becker (gary_l_becker@yahoo.com)

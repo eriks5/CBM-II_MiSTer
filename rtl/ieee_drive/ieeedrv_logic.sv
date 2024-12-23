@@ -288,24 +288,9 @@ endgenerate
 
 wire [7:0] ud5_data;
 
-wire [7:0] dat_di;
-
 wire [7:0] ud5_pa_o;
-wire [7:0] ud5_pa_oe;
 wire [7:0] ud5_pb_o;
-wire [7:0] ud5_pb_oe;
 
-wire       ud5_cb1_o;
-wire       ud5_cb1_oe;
-
-wire       ud5_ca2_o;
-wire       ud5_ca2_oe;
-
-wire       ud5_cb2_o;
-wire       ud5_cb2_oe;
-
-assign     drv_sync_o = ud5_ca2_o;
-assign     drv_rw     = ud5_cb2_o;
 assign     drv_pllsyn = ud5_pb_o[6] & ~drv_type[1];
 
 generate
@@ -318,38 +303,29 @@ endgenerate
 
 via6522 ud5
 (
-	.clock(clk_sys),
-	.rising(ph2_f),
-	.falling(ph2_r),
-	.reset(reset),
-
-	.addr(uc3_a[3:0]),
-	.wen(~uc3_rw & ud5_cs),
-	.ren(uc3_rw & ud5_cs),
-	.data_in(uc3_do),
 	.data_out(ud5_data),
+	.data_in(uc3_do),
+	.addr(uc3_a[3:0]),
+	.strobe(ph2_r & ud5_cs),
+	.we(~uc3_rw),
 
-	.port_a_o(ud5_pa_o),
-	.port_a_t(ud5_pa_oe),
-	.port_a_i(drv_dat_i & (ud5_pa_o | ~ud5_pa_oe)),
+	.porta_out(ud5_pa_o),
+	.porta_in(drv_dat_i),
 
-	.port_b_o(ud5_pb_o),
-	.port_b_t(ud5_pb_oe),
-	.port_b_i({drv_sync_i | drv_type[1], 7'b1111111} & (ud5_pb_o | ~ud5_pb_oe)),
+	.portb_out(ud5_pb_o),
+	.portb_in({drv_sync_i | drv_type[1], 7'b1111111}),
 
-	.ca1_i(drv_ready),
+	.ca1_in(drv_ready),
+	.ca2_out(drv_sync_o),
+	.ca2_in(1'b0),
+	.cb1_out(),
+	.cb1_in(drv_error),
+	.cb2_out(drv_rw),
+	.cb2_in(1'b0),
 
-	.ca2_o(ud5_ca2_o),
-	.ca2_t(ud5_ca2_oe),
-	.ca2_i(ud5_ca2_o | ~ud5_ca2_oe),
-
-	.cb1_o(ud5_cb1_o),
-	.cb1_t(ud5_cb1_oe),
-	.cb1_i(drv_error & (ud5_cb1_o | ~ud5_cb1_oe)),
-
-	.cb2_o(ud5_cb2_o),
-	.cb2_t(ud5_cb2_oe),
-	.cb2_i(ud5_cb2_o | ~ud5_cb2_oe)
+	.ce(ph2_f),
+	.clk(clk_sys),
+	.reset(reset)
 );
 
 // ====================================================================
