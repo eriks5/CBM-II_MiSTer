@@ -19,6 +19,12 @@ MiSTer FPGA core for the [Commodore CBM-II line of 8-bit computers](http://cbmst
 * Optional external ROM at location $2000, $4000 and $6000 in segment 15.
 * External IEC through USER_IO port (requires modified kernal or external ROM)
 
+### Disk support
+
+Core supports D64, D80 and D82 disk images through two 4040 and 8250 IEEE dual-disk drives. 
+When using a D80 disk image, the first disk access will result in an error. 
+This is normal behaviour of the 8250 drive.
+
 ## Acknowlegements
 
 This core could not exist without the following projects:

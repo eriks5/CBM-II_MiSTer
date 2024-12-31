@@ -13,7 +13,7 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-module ieeedrv_trkgen
+module ieeedrv_trkgen #(parameter SUBDRV=2)
 (
    input      [31:0] CLK,
 
@@ -45,7 +45,7 @@ module ieeedrv_trkgen
 	output      [7:0] byte_rd,
 
 	input             sync_wr,
-	input   		[7:0] byte_wr,
+	input       [7:0] byte_wr,
 
 	input             loaded,
 	input             sd_clk,
@@ -72,21 +72,21 @@ wire [4:0] sector_max = drv_type ? (
 								);
 
 wire [8:0] SYNC_SIZE = 9'd3;
-wire [8:0] GAP1 = 9'(drv_type ? 9 : 19);
+wire [8:0] GAP1 = 9'(drv_type ? 9 : 20);
 wire [8:0] GAP2 = drv_type ? (
 							9'd2
 						) : (
-							(track <  40) ? 9'd26 :
-							(track <  54) ? 9'd25 :
-							(track <  65) ? 9'd28 :
-							(track <  78) ? 9'd34 :
-							(track < 117) ? 9'd26 :
-							(track < 131) ? 9'd25 :
-							(track < 142) ? 9'd28 :
-												 9'd34
+							(track <  40) ? 9'd25 :
+							(track <  54) ? 9'd24 :
+							(track <  65) ? 9'd27 :
+							(track <  78) ? 9'd33 :
+							(track < 117) ? 9'd25 :
+							(track < 131) ? 9'd24 :
+							(track < 142) ? 9'd27 :
+												 9'd33
 						);
 wire [8:0] GAP3 = drv_type ? (
-							9'd255
+							9'd28
 						) : (
 							(track <  40) ? 9'd37 :
 							(track <  54) ? 9'd39 :
@@ -104,7 +104,7 @@ localparam HEADER_SYNC_CODE = 8'h08;
 localparam DATA_SYNC_CODE   = 8'h07;
 localparam TEST_SYNC_CODE   = 8'h0F;
 
-reg       bit_clk_en;
+reg bit_clk_en;
 always @(posedge clk_sys) begin
 	int       sum = 0;
 
@@ -115,7 +115,7 @@ always @(posedge clk_sys) begin
 	bit_clk_en <= 0;
 
 	sum = sum + (drv_type ? 4_000_000 : 6_000_000);
-	if(sum >= CLK) begin
+	if (sum >= CLK) begin
 		sum = sum - CLK;
 
 		track_r <= track;
@@ -143,35 +143,23 @@ ieeedrv_mem #(8,13) buffer
 	.q_a(sd_buff_din),
 
 	.clock_b(clk_sys),
-	.address_b({sector, buff_addr}),
+	.address_b({sector[drv_act], buff_addr}),
 	.data_b(buff_di),
 	.wren_b(we),
 	.q_b(buff_do)
 );
 
-reg drv_updated, drv_update_ack;
 reg trk_reset, trk_reset_ack;
-
 always @(posedge clk_sys) begin
 	reg drv_act_l;
 
-	drv_act_l <= drv_act;
-
-	if (drv_act_l != drv_act) 
-		drv_updated <= 1;
-	else if (drv_update_ack)
-		drv_updated <= 0;
-end
-
-always @(posedge sd_clk) begin
-	if (reset || drv_updated || &track || img_type[1] != drv_type || (!img_type[0] && drv_hd) || !loaded) begin
+	if (reset || !loaded || &track || img_type[1] != drv_type || (!img_type[0] && drv_hd) || drv_act != drv_act_l) begin
 		trk_reset <= 1;
-		if(drv_updated && !drv_update_ack && sd_buff_wr)
-			drv_update_ack <= 1;
+		if (reset || !loaded || &track || img_type[1] != drv_type || (!img_type[0] && drv_hd) || busy)
+			drv_act_l <= drv_act;
 	end
 	else if (trk_reset_ack) begin
 		trk_reset <= 0;
-		drv_update_ack <= 0;
 	end
 end
 
@@ -179,7 +167,7 @@ reg  [7:0] buff_addr;
 wire [7:0] buff_do;
 reg  [7:0] buff_di;
 
-reg  [4:0] sector;
+reg  [4:0] sector[SUBDRV];
 
 typedef enum bit[3:0] {RW_RESET, RW_IDLE, R_SYNCHDR, R_SYNCDATA, R_SYNCTEST, R_HEADER, R_DATA, R_TAIL, R_TEST, W_SYNC, W_HEADER, W_DATA} rwState_t;
 
@@ -203,7 +191,7 @@ always @(posedge clk_sys) begin
 		byte_n  <= 1;
 
 		if (sync_rd_n) begin
-			if (bit_cnt == 0) brdy_n <= 0;   
+			if (bit_cnt == 0) brdy_n <= 0;
 			if (bit_cnt == 1) byte_n <= 0;
 		end
 
@@ -225,7 +213,6 @@ always @(posedge clk_sys) begin
 					begin
 						buff_addr <= 0;
 						chk       <= 0;
-						sector    <= 0;
 						error     <= 1;
 
 						if (!trk_reset)
@@ -236,6 +223,9 @@ always @(posedge clk_sys) begin
 					begin
 						buff_addr <= 0;
 						chk       <= 0;
+
+						if (sector[drv_act] > sector_max)
+							sector[drv_act] <= 0;
 
 						if (trk_reset)
 							rwState <= RW_RESET;
@@ -255,14 +245,13 @@ always @(posedge clk_sys) begin
 					begin
 						buff_addr <= 0;
 						chk       <= 0;
-						sync_rd_n <= 1;
 
 						if (!rw || trk_reset) begin
 							byte_cnt <= 0;
 
 							if (trk_reset)
 								rwState <= RW_RESET;
-							else if (!rw && !sync_rd_n && !wprot)
+							else if (!rw && sync_wr && !wprot)
 								rwState <= W_SYNC;
 							else
 								rwState <= RW_IDLE;
@@ -288,7 +277,7 @@ always @(posedge clk_sys) begin
 									begin 
 										rwState <= R_TEST;
 										byte_rd <= drv_type ? TEST_SYNC_CODE : 8'h00;
-										sector  <= 0;
+										sector[drv_act] <= 0;
 									end
 								default: 
 									rwState <= RW_IDLE;
@@ -306,15 +295,15 @@ always @(posedge clk_sys) begin
 
 							if (trk_reset)
 								rwState <= RW_RESET;
-							else if (!rw && !sync_rd_n && !wprot)
+							else if (!rw && sync_wr && !wprot)
 								rwState <= W_SYNC;
 							else
 								rwState <= RW_IDLE;
 						end
 						else 
 							case(byte_cnt)
-								0: byte_rd <= sector ^ track ^ id[15:8] ^ id[7:0];
-								1: byte_rd <= sector;
+								0: byte_rd <= sector[drv_act] ^ track ^ id[15:8] ^ id[7:0];
+								1: byte_rd <= sector[drv_act];
 								2: byte_rd <= track;
 								3: byte_rd <= id[15:8];
 								4: byte_rd <= id[7:0];
@@ -342,7 +331,7 @@ always @(posedge clk_sys) begin
 
 							if (trk_reset)
 								rwState <= RW_RESET;
-							else if (!rw && !sync_rd_n && !wprot)
+							else if (!rw && sync_wr && !wprot)
 								rwState <= W_SYNC;
 							else
 								rwState <= RW_IDLE;
@@ -360,24 +349,20 @@ always @(posedge clk_sys) begin
 						chk       <= 0;
 						byte_rd   <= chk;
 
-						if ((rw_l && !rw) || (!rw && !sync_rd_n && !wprot) || trk_reset) begin
+						if ((rw_l && !rw) || (!rw && sync_wr && !wprot) || trk_reset) begin
 							byte_cnt <= 0;
 
 							if (trk_reset)
 								rwState <= RW_RESET;
-							else if (!rw && !sync_rd_n && !wprot)
+							else if (!rw && sync_wr && !wprot)
 								rwState <= W_SYNC;
 							else
 								rwState <= RW_IDLE;
 						end
-						else if ((sector < sector_max && byte_cnt == GAP2) || byte_cnt == (GAP2+GAP3)) begin
+						else if ((sector[drv_act] < sector_max && byte_cnt == GAP2-1) || byte_cnt == (GAP2+GAP3-1)) begin
 							byte_cnt <= 0;
-
-							rwState <= R_SYNCHDR;
-
-							sector <= sector + 1'b1;
-							if (sector == sector_max)
-								sector <= 0;
+							sector[drv_act] <= sector[drv_act] + 1'b1;
+							rwState <= RW_IDLE;
 						end
 					end
 
@@ -387,25 +372,25 @@ always @(posedge clk_sys) begin
 						chk       <= 0;
 						byte_rd   <= 8'h00;
 
-						if ((rw_l && !rw) || (!rw && !sync_rd_n && !wprot) || track != old_track || trk_reset) begin
+						if ((rw_l && !rw) || (!rw && sync_wr && !wprot) || track != old_track || trk_reset) begin
 							byte_cnt <= 0;
-							sector   <= 0;
+							sector[drv_act] <= 0;
 
 							if (trk_reset)
 								rwState <= RW_RESET;
-							else if (!rw && !sync_rd_n && !wprot)
+							else if (!rw && sync_wr && !wprot)
 								rwState <= W_SYNC;
 							else
 								rwState <= RW_IDLE;
 						end
-						else if (byte_cnt == SECTORLEN && sector <= sector_max) begin
+						else if (byte_cnt == SECTORLEN && sector[drv_act] <= sector_max) begin
 							byte_cnt <= 0;
-							sector   <= sector + 1'b1;
+							sector[drv_act] <= sector[drv_act] + 1'b1;
 						end
-						else if (byte_cnt == GAP3 && sector > sector_max) begin
+						else if (byte_cnt == GAP3 && sector[drv_act] > sector_max) begin
 							byte_cnt <= 0;
-							sector   <= 0;
-							rwState  <= R_SYNCTEST;
+							sector[drv_act] <= 0;
+							rwState <= R_SYNCTEST;
 						end
 					end
 
@@ -427,7 +412,7 @@ always @(posedge clk_sys) begin
 
 							if (rw || byte_wr == TEST_SYNC_CODE) begin
 								rwState <= R_TEST;
-								sector  <= 0;
+								sector[drv_act] <= 0;
 							end
 							else if (byte_wr == HEADER_SYNC_CODE)
 								rwState <= W_HEADER;
@@ -448,14 +433,14 @@ always @(posedge clk_sys) begin
 
 							if (trk_reset)
 								rwState <= RW_RESET;
-							else if (!rw && !sync_rd_n && !wprot)
+							else if (!rw && sync_wr && !wprot)
 								rwState <= W_SYNC;
 							else
 								rwState <= RW_IDLE;
 						end
 						else
 							case(byte_cnt)
-								1: sector <= byte_wr[4:0];
+								1: sector[drv_act] <= byte_wr[4:0];
 								3: id_hdr[15:8] <= byte_wr;
 								4: begin
 										byte_cnt	   <= 0;
@@ -471,24 +456,21 @@ always @(posedge clk_sys) begin
 					begin
 						chk <= 0;
 
-						if (byte_cnt[8])
-							sector <= 0;
-
 						if (rw || wprot || trk_reset || sync_wr || byte_cnt[8]) begin
 							buff_addr <= 0;
 							byte_cnt  <= 0;
 
 							if (trk_reset)
 								rwState <= RW_RESET;
-							else if (!rw && !sync_rd_n && !wprot)
+							else if (!rw && sync_wr && !wprot)
 								rwState <= W_SYNC;
 							else
-								rwState <= RW_IDLE;
+								rwState <= R_TAIL;
 						end
 						else begin
 							buff_addr <= 8'((byte_cnt == 0) ? 0 : buff_addr + 1);
 							buff_di   <= byte_wr;
-							we 		 <= 1;
+							we        <= 1;
 						end
 					end
 			endcase

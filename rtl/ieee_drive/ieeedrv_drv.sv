@@ -60,7 +60,7 @@ localparam NS = SUBDRV-1;
 // Reset
 // ====================================================================
 
-reg [7:0] drv_reset_cnt;
+reg [23:0] drv_reset_cnt;
 
 always @(posedge clk_sys) begin
 	reg drv_type_l;
@@ -68,7 +68,7 @@ always @(posedge clk_sys) begin
 	drv_type_l <= drv_type;
 	if (reset || drv_type_l != drv_type)
 		drv_reset_cnt <= '1;
-	else if (drv_reset_cnt)
+	else if (drv_reset_cnt && ce)
 		drv_reset_cnt <= drv_reset_cnt - 1'b1;
 end
 
@@ -178,10 +178,10 @@ generate
 
 			.drv_type(drv_type),
 
-			.we(drv_we & (drv_ready | drv_sync_o) & drv_mtr[i] & (drv_act == i)),
+			.we(drv_we & (drv_ready | drv_sync_o) & drv_mtr[i] & (drv_sel == i)),
 
 			.img_mounted(img_mounted[i]),
-			.act(led_act[i] & (drv_act == i)),
+			.act(led_act[i] & (drv_sel == i)),
 
 			.mtr(drv_mtr[i]),
 			.stp(drv_step[i]),
@@ -251,7 +251,7 @@ ieeedrv_track #(SUBDRV) drv_track
 reg  [15:0] id_hdr;
 reg         id_wr;
 
-ieeedrv_trkgen drv_trkgen
+ieeedrv_trkgen #(SUBDRV) drv_trkgen
 (
 	.CLK(CLK),
 
