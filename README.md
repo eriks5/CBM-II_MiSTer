@@ -3,7 +3,7 @@
 MiSTer FPGA core for the [Commodore CBM-II line of 8-bit computers](http://cbmsteve.ca/cbm2/index.html)
 (aka. PET-II, P128, B128, B256, P500/B600/B700 series)
 
-![](b3.jpg)
+![CBM-II Family photo](https://github.com/eriks5/CBM-II_MiSTer/blob/master/b3.jpg?raw=true)
 
 ## Core Features
 
@@ -27,7 +27,7 @@ This is normal behaviour of the 8250 drive.
 
 ## Keyboard
 
-![](keyboard.png)
+![keyboard-mapping](https://github.com/eriks5/CBM-II_MiSTer/blob/master/keyboard.png?raw=true)
 
 The following PC keys are mapped to the special CBM-II keys:
 
