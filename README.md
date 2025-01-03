@@ -25,6 +25,20 @@ Core supports D64, D80 and D82 disk images through two 4040 and 8250 IEEE dual-d
 When using a D80 disk image, the first disk access will result in an error. 
 This is normal behaviour of the 8250 drive.
 
+## Keyboard
+
+![](keyboard.png)
+
+The following PC keys are mapped to the special CBM-II keys:
+
+* <kbd>End</kbd> &rArr; <kbd>RUN STOP</kbd>
+* <kbd>PgUp</kbd> &rArr; <kbd>OFF RVS</kbd>
+* <kbd>PgDn</kbd> &rArr; <kbd>NORM GRAPH</kbd>
+* <kbd>Delete</kbd> &rArr; <kbd>CE</kbd>
+* <kbd>F11</kbd> &rArr; <kbd>C=</kbd>
+* <kbd>Alt</kbd>+Numpad <kbd>0</kbd> &rArr; <kbd>00</kbd>
+* <kbd>Alt</kbd>+Numpad <kbd>/</kbd> &rArr; <kbd>?</kbd>
+
 ## Acknowlegements
 
 This core could not exist without the following projects:
