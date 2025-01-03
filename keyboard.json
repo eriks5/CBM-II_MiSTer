@@ -1,7 +1,7 @@
 [
   {
     "name": "CBM-II MiSTer",
-    "css": "@font-face {\n  font-family: 'C64ProMono';\n  src: url(\"/fonts/C64_Pro_Mono-STYLE.eot\");\n  src: url(\"/fonts/C64_Pro_Mono-STYLE.eot?#iefix\") format('embedded-opentype'),\n       url(\"/fonts/C64_Pro_Mono-STYLE.woff\") format('woff'),\n       url(\"/fonts/C64_Pro_Mono-STYLE.ttf\") format('truetype'),\n       url(\"/fonts/C64_Pro_Mono-STYLE.svg#C64ProMono\") format('svg');\n  font-weight: normal;\n  font-style: normal;\n}\n\n.petscii {\n  display: inline-block;\n  font: normal normal normal 14px/1 C64ProMono;\n  font-size: inherit;\n  text-rendering: auto;\n  -webkit-font-smoothing: antialiased;\n  -moz-osx-font-smoothing: grayscale;\n  transform: translate(0, 0);\n  border: solid 1px;\n}\n\n.petscii-club, .petscii-heart, .petscii-spade, .petscii-diamond {\n  font-size: 7.5px !important;\n}\n\n.petscii-club, .petscii-heart, .petscii-spade, .petscii-diamond, .petscii-arrow-up, .petscii-arrow-left, .petscii-pi {\n  border: 0;\n}\n\n.keylabel9 .petscii , .keylabel10 .petscii , .keylabel11 .petscii {\n  font-size: 6.5px;\n}\n  \n.petscii-bar-bottom-left:after { content: \"\\0ee4c\"; }\n.petscii-bar-bottom-right:after { content: \"\\0ee7a\"; }\n.petscii-bar-horz-0:after { content: \"\\0ee63\"; } \n.petscii-bar-horz-1:after { content: \"\\0ee45\"; }\n.petscii-bar-horz-2:after { content: \"\\0ee44\"; }\n.petscii-bar-horz-3:after { content: \"\\0ee43\"; }\n.petscii-bar-horz-4:after { content: \"\\0ee46\"; }\n.petscii-bar-horz-5:after { content: \"\\0ee46\"; }\n.petscii-bar-horz-6:after { content: \"\\0ee52\"; }\n.petscii-bar-horz-7:after { content: \"\\0ee64\"; } \n.petscii-bar-top-left:after { content: \"\\0ee4f\"; }\n.petscii-bar-top-right:after { content: \"\\0ee50\"; }\n.petscii-bar-vert-0:after { content: \"\\0ee65\"; } \n.petscii-bar-vert-1:after { content: \"\\0ee54\"; }\n.petscii-bar-vert-2:after { content: \"\\0ee47\"; }\n.petscii-bar-vert-3:after { content: \"\\0ee42\"; }\n.petscii-bar-vert-4:after { content: \"\\0ee42\"; }\n.petscii-bar-vert-5:after { content: \"\\0ee48\"; }\n.petscii-bar-vert-6:after { content: \"\\0ee59\"; }\n.petscii-bar-vert-7:after { content: \"\\0ee67\"; } \n.petscii-block-horz-0:after { content: \"\\0ee63\"; } \n.petscii-block-horz-1:after { content: \"\\0ee77\"; } \n.petscii-block-horz-2:after { content: \"\\0ee78\"; } \n.petscii-block-horz-3:after { content: \"\\0ee62\"; } \n.petscii-block-horz-4:after { content: \"\\0ee79\"; } \n.petscii-block-horz-5:after { content: \"\\0ee6f\"; } \n.petscii-block-horz-6:after { content: \"\\0ee64\"; } \n.petscii-block-vert-0:after { content: \"\\0ee65\"; } \n.petscii-block-vert-1:after { content: \"\\0ee74\"; } \n.petscii-block-vert-2:after { content: \"\\0ee75\"; } \n.petscii-block-vert-3:after { content: \"\\0ee61\"; } \n.petscii-block-vert-4:after { content: \"\\0ee76\"; } \n.petscii-block-vert-5:after { content: \"\\0ee6a\"; } \n.petscii-block-vert-6:after { content: \"\\0ee67\"; } \n.petscii-checkerboard:after { content: \"\\0ee7f\"; } \n.petscii-circle-filled:after { content: \"\\0ee51\"; }\n.petscii-circle-open:after { content: \"\\0ee57\"; }\n.petscii-club:after { content: \"\\0ee58\"; }\n.petscii-corner-round-bottom-left:after { content: \"\\0ee49\"; }\n.petscii-corner-round-bottom-right:after { content: \"\\0ee55\"; }\n.petscii-corner-round-top-left:after { content: \"\\0ee4b\"; }\n.petscii-corner-round-top-right:after { content: \"\\0ee4a\"; }\n.petscii-corner-square-bottom-left-filled:after { content: \"\\0ee7b\"; } \n.petscii-corner-square-bottom-left:after { content: \"\\0ee6e\"; } \n.petscii-corner-square-bottom-right-filled:after { content: \"\\0ee6c\"; } \n.petscii-corner-square-bottom-right:after { content: \"\\0ee70\"; } \n.petscii-corner-square-top-left-filled:after { content: \"\\0ee7e\"; } \n.petscii-corner-square-top-left:after { content: \"\\0ee7d\"; } \n.petscii-corner-square-top-right-filled:after { content: \"\\0ee7c\"; } \n.petscii-corner-square-top-right:after { content: \"\\0ee6d\"; } \n.petscii-cross-diag:after { content: \"\\0ee56\"; }\n.petscii-cross:after { content: \"\\0ee5b\"; }\n.petscii-diag-bottom-top-filled:after { content: \"\\0ee69\"; }\n.petscii-diag-bottom-top:after { content: \"\\0ee4e\"; }\n.petscii-diag-top-bottom-filled:after { content: \"\\0ee5f\"; } \n.petscii-diag-top-bottom:after { content: \"\\0ee4d\"; }\n.petscii-diamond:after { content: \"\\0ee5a\"; }\n.petscii-halftone-bottom:after { content: \"\\0ee68\"; } \n.petscii-halftone-left:after { content: \"\\0ee5c\"; }\n.petscii-halftone:after { content: \"\\0ee66\"; }\n.petscii-heart:after { content: \"\\0ee53\"; }\n.petscii-spade:after { content: \"\\0ee41\"; }\n.petscii-tbar-down:after { content: \"\\0ee72\"; } \n.petscii-tbar-left:after { content: \"\\0ee73\"; } \n.petscii-tbar-right:after { content: \"\\0ee6b\"; } \n.petscii-tbar-up:after { content: \"\\0ee71\"; }\n.petscii-arrow-left:after { content: \"\\02190\"; }\n.petscii-arrow-up:after { content: \"\\02191\"; }\n.petscii-pi:after { content: \"\\003c0\"; }\n"
+    "css": "@font-face {\n  font-family: 'C64ProMono';\n  src: url(\"/fonts/C64_Pro_Mono-STYLE.eot\");\n  src: url(\"/fonts/C64_Pro_Mono-STYLE.eot?#iefix\") format('embedded-opentype'),\n       url(\"/fonts/C64_Pro_Mono-STYLE.woff\") format('woff'),\n       url(\"/fonts/C64_Pro_Mono-STYLE.ttf\") format('truetype'),\n       url(\"/fonts/C64_Pro_Mono-STYLE.svg#C64ProMono\") format('svg');\n  font-weight: normal;\n  font-style: normal;\n}\n\n.petscii {\n  display: inline-block;\n  font: normal normal normal 14px/1 C64ProMono;\n  font-size: inherit;\n  text-rendering: auto;\n  -webkit-font-smoothing: antialiased;\n  -moz-osx-font-smoothing: grayscale;\n  transform: translate(0, 0);\n  border: solid 1px;\n  opacity: 0.66;\n}\n\n.petscii-club, .petscii-heart, .petscii-spade, .petscii-diamond {\n  border: 0;\n  font-size: 7.5px !important;\n}\n\n.keylabel9 .petscii , .keylabel10 .petscii , .keylabel11 .petscii {\n  font-size: 6.5px;\n}\n  \n.petscii-bar-bottom-left:after { content: \"\\0ee4c\"; }\n.petscii-bar-bottom-right:after { content: \"\\0ee7a\"; }\n.petscii-bar-horz-0:after { content: \"\\0ee63\"; } \n.petscii-bar-horz-1:after { content: \"\\0ee45\"; }\n.petscii-bar-horz-2:after { content: \"\\0ee44\"; }\n.petscii-bar-horz-3:after { content: \"\\0ee43\"; }\n.petscii-bar-horz-4:after { content: \"\\0ee46\"; }\n.petscii-bar-horz-5:after { content: \"\\0ee46\"; }\n.petscii-bar-horz-6:after { content: \"\\0ee52\"; }\n.petscii-bar-horz-7:after { content: \"\\0ee64\"; } \n.petscii-bar-top-left:after { content: \"\\0ee4f\"; }\n.petscii-bar-top-right:after { content: \"\\0ee50\"; }\n.petscii-bar-vert-0:after { content: \"\\0ee65\"; } \n.petscii-bar-vert-1:after { content: \"\\0ee54\"; }\n.petscii-bar-vert-2:after { content: \"\\0ee47\"; }\n.petscii-bar-vert-3:after { content: \"\\0ee42\"; }\n.petscii-bar-vert-4:after { content: \"\\0ee42\"; }\n.petscii-bar-vert-5:after { content: \"\\0ee48\"; }\n.petscii-bar-vert-6:after { content: \"\\0ee59\"; }\n.petscii-bar-vert-7:after { content: \"\\0ee67\"; } \n.petscii-block-horz-0:after { content: \"\\0ee63\"; } \n.petscii-block-horz-1:after { content: \"\\0ee77\"; } \n.petscii-block-horz-2:after { content: \"\\0ee78\"; } \n.petscii-block-horz-3:after { content: \"\\0ee62\"; } \n.petscii-block-horz-4:after { content: \"\\0ee79\"; } \n.petscii-block-horz-5:after { content: \"\\0ee6f\"; } \n.petscii-block-horz-6:after { content: \"\\0ee64\"; } \n.petscii-block-vert-0:after { content: \"\\0ee65\"; } \n.petscii-block-vert-1:after { content: \"\\0ee74\"; } \n.petscii-block-vert-2:after { content: \"\\0ee75\"; } \n.petscii-block-vert-3:after { content: \"\\0ee61\"; } \n.petscii-block-vert-4:after { content: \"\\0ee76\"; } \n.petscii-block-vert-5:after { content: \"\\0ee6a\"; } \n.petscii-block-vert-6:after { content: \"\\0ee67\"; } \n.petscii-checkerboard:after { content: \"\\0ee7f\"; } \n.petscii-circle-filled:after { content: \"\\0ee51\"; }\n.petscii-circle-open:after { content: \"\\0ee57\"; }\n.petscii-club:after { content: \"\\0ee58\"; }\n.petscii-corner-round-bottom-left:after { content: \"\\0ee49\"; }\n.petscii-corner-round-bottom-right:after { content: \"\\0ee55\"; }\n.petscii-corner-round-top-left:after { content: \"\\0ee4b\"; }\n.petscii-corner-round-top-right:after { content: \"\\0ee4a\"; }\n.petscii-corner-square-bottom-left-filled:after { content: \"\\0ee7b\"; } \n.petscii-corner-square-bottom-left:after { content: \"\\0ee6e\"; } \n.petscii-corner-square-bottom-right-filled:after { content: \"\\0ee6c\"; } \n.petscii-corner-square-bottom-right:after { content: \"\\0ee70\"; } \n.petscii-corner-square-top-left-filled:after { content: \"\\0ee7e\"; } \n.petscii-corner-square-top-left:after { content: \"\\0ee7d\"; } \n.petscii-corner-square-top-right-filled:after { content: \"\\0ee7c\"; } \n.petscii-corner-square-top-right:after { content: \"\\0ee6d\"; } \n.petscii-cross-diag:after { content: \"\\0ee56\"; }\n.petscii-cross:after { content: \"\\0ee5b\"; }\n.petscii-diag-bottom-top-filled:after { content: \"\\0ee69\"; }\n.petscii-diag-bottom-top:after { content: \"\\0ee4e\"; }\n.petscii-diag-top-bottom-filled:after { content: \"\\0ee5f\"; } \n.petscii-diag-top-bottom:after { content: \"\\0ee4d\"; }\n.petscii-diamond:after { content: \"\\0ee5a\"; }\n.petscii-halftone-bottom:after { content: \"\\0ee68\"; } \n.petscii-halftone-left:after { content: \"\\0ee5c\"; }\n.petscii-halftone:after { content: \"\\0ee66\"; }\n.petscii-heart:after { content: \"\\0ee53\"; }\n.petscii-spade:after { content: \"\\0ee41\"; }\n.petscii-tbar-down:after { content: \"\\0ee72\"; } \n.petscii-tbar-left:after { content: \"\\0ee73\"; } \n.petscii-tbar-right:after { content: \"\\0ee6b\"; } \n.petscii-tbar-up:after { content: \"\\0ee71\"; }\n"
   },
   [
     {
@@ -30,9 +30,9 @@
     "F9",
     "F10",
     {
-      "f": 5
+      "f": 4
     },
-    "C=",
+    "<i class='kb kb-logo-commodore'></i>",
     {
       "t": "#e41616",
       "f": 3
@@ -51,16 +51,20 @@
       "y": 0.5,
       "a": 5,
       "f": 5,
-      "f2": 3
+      "fa": [
+        0,
+        4,
+        0,
+        0,
+        3
+      ]
     },
-    "£\n<i class='petscii petscii-arrow-left'></i>\n\n\n<i class='petscii petscii-diag-top-bottom-filled'></i>",
+    "£\n<i class='fa fa-long-arrow-left'></i>\n\n\n<i class='petscii petscii-diag-top-bottom-filled'></i>",
     {
-      "t": "#000000\n\n\n\n#000000",
       "f": 5
     },
     "!\n1\n\n\n<i class='petscii petscii-block-vert-3'></i></i>",
     {
-      "t": "#000000",
       "f": 5
     },
     "@\n2\n\n\n<i class='petscii petscii-block-horz-4'></i>",
@@ -82,66 +86,70 @@
         0
       ]
     },
-    "<i class='petscii petscii-arrow-up'></i>\n6\n\n\n<i class='petscii petscii-bar-vert-7'></i>",
+    "<i class='fa fa-long-arrow-up'></i>\n6\n\n\n<i class='petscii petscii-bar-vert-7'></i>",
     {
       "f": 5
     },
     "&\n7\n\n\n<i class='petscii petscii-corner-square-top-left-filled'></i>",
     {
-      "f": 5
+      "fa": [
+        4,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1
+      ]
     },
-    "*\n8\n\n\n<i class='petscii petscii-corner-square-bottom-left-filled'></i>",
-    {
-      "f": 5
-    },
+    "\n8\n\n\n<i class='petscii petscii-corner-square-bottom-left-filled'></i>\n\n<i class='fa fa-asterisk'></i><br/><br/><br/>",
     "(\n9\n\n\n<i class='petscii petscii-checkerboard'></i>",
-    {
-      "f": 5
-    },
     ")\n0\n\n\n<i class='petscii petscii-corner-square-bottom-right-filled'></i>",
     {
       "a": 7,
       "f": 5
     },
-    "-\n\n\n\n<i class='petscii petscii-corner-square-top-right-filled'></i>",
+    "&ndash;\n\n\n\n<i class='petscii petscii-corner-square-top-right-filled'></i>",
     {
       "a": 5,
       "f": 5
     },
     "+\n=\n\n\n<i class='petscii petscii-diag-bottom-top-filled'></i>",
     {
+      "a": 7,
       "f": 2,
       "w": 2
     },
-    "INS\nDEL",
+    "INS<br/>DEL",
     {
-      "x": 0.25,
-      "a": 7
+      "x": 0.25
     },
     "INS",
-    {
-      "a": 5
-    },
-    "CLR\nHOME",
-    "OFF\nRVS",
+    "CLR<br/>HOME",
+    "OFF<br/>RVS",
     {
       "x": 0.25,
-      "a": 7,
       "f": 3
     },
     "",
     {
-      "t": "#000000\n\n#2519ef\n\n\n#2519ef\n\n\n\n\n#2519ef",
+      "t": "#000000\n\n#2519ef\n\n\n#2519ef",
       "a": 0,
       "f": 5
     },
     "\n\n?\n\n\n<i class='petscii petscii-block-horz-2'></i>\n\n\n\n/\n\n<i class='petscii petscii-block-horz-5'></i>",
     {
       "t": "#000000",
-      "a": 7
+      "a": 7,
+      "fa": [
+        1
+      ]
     },
-    "*\n\n\n\n<i class='petscii petscii-block-horz-4'></i>",
-    "-\n\n\n\n<i class='petscii petscii-block-vert-5'></i>"
+    "<i class='fa fa-asterisk'></i>\n\n\n\n<i class='petscii petscii-block-horz-4'></i>",
+    {
+      "f": 5
+    },
+    "&ndash;\n\n\n\n<i class='petscii petscii-block-vert-5'></i>"
   ],
   [
     {
@@ -166,6 +174,7 @@
     "]\n\n\n\n<i class='petscii petscii-bar-bottom-right'></i>",
     {
       "x": 0.25,
+      "a": 4,
       "f": 2,
       "w": 1.25,
       "h": 2,
@@ -173,19 +182,16 @@
       "h2": 1,
       "x2": -0.25
     },
-    "RETURN",
-    {
-      "x": 0.25
-    },
-    "CE\n\n\n\n<i class='petscii petscii-block-horz-2'></i>",
-    {
-      "a": 5
-    },
-    "RUN\nSTOP",
-    "NORM\nGRAPH",
+    "<br/>RETURN",
     {
       "x": 0.25,
-      "a": 7,
+      "a": 7
+    },
+    "CE\n\n\n\n<i class='petscii petscii-block-horz-2'></i>",
+    "RUN<br/>STOP",
+    "NORM<br/>GRAPH",
+    {
+      "x": 0.25,
       "f": 5
     },
     "7\n\n\n\n<i class='petscii petscii-block-vert-1'></i>",
@@ -198,13 +204,11 @@
   ],
   [
     {
-      "a": 5,
       "f": 2,
       "w": 1.75
     },
-    "SHIFT\n\n\n\n\n\nLOCK",
+    "SHIFT<br/>LOCK",
     {
-      "a": 7,
       "f": 5
     },
     "A\n\n\n\n<i class='petscii petscii-spade'></i>",
@@ -275,17 +279,13 @@
     "2\n\n\n\n<i class='petscii petscii-corner-square-bottom-left'></i>",
     "3\n\n\n\n<i class='petscii petscii-cross'></i>",
     {
-      "f": 3,
-      "fa": [
-        2
-      ],
+      "f": 2,
       "h": 2
     },
     "ENTER"
   ],
   [
     {
-      "f": 2,
       "w": 1.25
     },
     "CTRL",
@@ -332,7 +332,7 @@
     "→",
     {
       "x": 0.25,
-      "t": "#000000\n\n#2519ef\n\n\n\n\n\n\n\n#2519ef",
+      "t": "#000000\n\n#2519ef",
       "a": 4,
       "f": 5,
       "w": 2

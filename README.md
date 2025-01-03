@@ -31,9 +31,10 @@ This is normal behaviour of the 8250 drive.
 
 The following PC keys are mapped to the special CBM-II keys:
 
-* <kbd>End</kbd> &rArr; <kbd>RUN STOP</kbd>
-* <kbd>PgUp</kbd> &rArr; <kbd>OFF RVS</kbd>
-* <kbd>PgDn</kbd> &rArr; <kbd>NORM GRAPH</kbd>
+* <kbd>Home</kbd> &rArr; <kbd>CLR/HOME</kbd>
+* <kbd>End</kbd> &rArr; <kbd>RUN/STOP</kbd>
+* <kbd>PgUp</kbd> &rArr; <kbd>OFF/RVS</kbd>
+* <kbd>PgDn</kbd> &rArr; <kbd>NORM/GRAPH</kbd>
 * <kbd>Delete</kbd> &rArr; <kbd>CE</kbd>
 * <kbd>F11</kbd> &rArr; <kbd>C=</kbd>
 * <kbd>Alt</kbd>+Numpad <kbd>0</kbd> &rArr; <kbd>00</kbd>
