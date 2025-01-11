@@ -54,6 +54,7 @@ architecture rtl of cpu_6509 is
 	signal indReg : std_logic_vector(7 downto 0);
 
 	signal indCount : unsigned(2 downto 0);
+	signal indLoad : std_logic;
 	signal lastA0 : std_logic;
 begin
 
@@ -108,12 +109,13 @@ begin
 			elsif enable = '1' and (rdy = '1' or localWe = '0') then
 				lastA0 <= localA(0);
 				if localSync = '1' then
+					indLoad <= din(5);
 					if din(7 downto 6) = "10" and din(4 downto 0) = "10001" then
 						indCount <= to_unsigned(1, 3);
 					else
 						indCount <= (others => '0');
 					end if;
-				elsif (indCount = 1 and localA(0) = lastA0) then
+				elsif indCount = 1 and localA(0) = lastA0 then
 					indCount <= (others => '0');
 				elsif indCount /= 0 then
 					indCount <= indCount + 1;
@@ -124,7 +126,7 @@ begin
 	
 	addr <= unsigned(localA(15 downto 0));
 	dout <= unsigned(localDo) when localAccess = '0' or widePO = '1' else unsigned("0000" & localDo(3 downto 0));
-	pout <= unsigned(indReg) when localSync = '0' and indCount >= 4 else unsigned(exeReg);
+	pout <= unsigned(indReg) when localSync = '0' and indCount >= 4 and (indLoad = '1' or localWe = '0') else unsigned(exeReg);
 	we   <= not localWe;
 	sync <= localSync;
 end architecture;
