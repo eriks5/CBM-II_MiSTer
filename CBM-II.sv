@@ -980,6 +980,30 @@ assign CLK_VIDEO = clk_dbl;
 assign VGA_SL    = (status[20:18] > 2) ? status[19:18] - 2'd2 : 2'd0;
 assign VGA_F1    = 0;
 
+wire [7:0] rc, gc, bc;
+wire vsc,hsc,hblc,vblc;
+video_cleaner video_cleaner
+(
+	.clk_vid(CLK_VIDEO),
+	.ce_pix(ce_pix),
+
+	.R(r),
+	.G(g),
+	.B(b),
+	.HSync(hsync_out),
+	.VSync(vsync_out),
+	.HBlank(hblank),
+	.VBlank(vblank),
+
+	.VGA_R(rc),
+	.VGA_G(gc),
+	.VGA_B(bc),
+	.VGA_VS(vsc),
+	.VGA_HS(hsc),
+	.HBlank_out(hblc),
+	.VBlank_out(vblc)
+);
+
 reg [9:0] vcrop;
 reg wide;
 always @(posedge CLK_VIDEO) begin
@@ -1036,13 +1060,13 @@ video_mixer #(.GAMMA(1)) video_mixer
 	.gamma_bus(gamma_bus),
 
 	.ce_pix(ce_pix),
-	.R(r),
-	.G(g),
-	.B(b),
-	.HSync(hsync_out),
-	.VSync(vsync_out),
-	.HBlank(hblank),
-	.VBlank(vblank),
+	.R(rc),
+	.G(gc),
+	.B(bc),
+	.HSync(hsc),
+	.VSync(vsc),
+	.HBlank(hblc),
+	.VBlank(vblc),
 
 	.HDMI_FREEZE(HDMI_FREEZE),
 	.freeze_sync(freeze_sync),
