@@ -626,8 +626,6 @@ wire       statvid     =  tpi1_pco[6];
 wire       vicdotsel   =  tpi1_pco[7];
 
 mos_tpi tpi1 (
-   .mode(1),
-
    .clk(clk_sys),
    .res_n(~reset),
    .cs_n(~(cs_tpi1 & enableIO_p)),
@@ -710,8 +708,6 @@ wire [7:0] tpi2_pco;
 assign vicAddr[15:14] = tpi2_pco[7:6];
 
 mos_tpi tpi2 (
-   .mode(1),
-
    .clk(clk_sys),
    .res_n(~reset),
    .cs_n(~(cs_tpi2 & enableIO_p)),

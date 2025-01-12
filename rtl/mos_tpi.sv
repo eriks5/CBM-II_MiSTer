@@ -13,8 +13,10 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-module mos_tpi (
-  input  wire       mode,   // 0 - 6523, 1 - 6525
+module mos_tpi #(
+  parameter MODEL = 1,      // 0 - 6523, 1 - 6525
+	parameter CPULSETIME = 18 // clk count to generate a ~500ns pulse
+)(
   input  wire       clk,
   input  wire       res_n,
   input  wire       cs_n,
@@ -37,6 +39,8 @@ module mos_tpi (
   output wire [7:0] pc_oe
 );
 
+localparam CPULSETIME_BITS = $clog2(CPULSETIME);
+
 // Internal Registers
 reg [7:0] pra;
 reg [7:0] prb;
@@ -49,7 +53,7 @@ reg [1:0] crcb;
 reg [1:0] crca;
 reg [1:0] ie;
 reg       ip;
-reg       mc_r;
+reg       mc;
 
 reg       cb;
 reg       ca;
@@ -59,7 +63,6 @@ reg [4:0] air[6];
 
 wire      rd = !cs_n & rw;
 wire      wr = !cs_n & !rw;
-wire      mc = mode & mc_r;
 
 // Register Decoding
 always @(posedge clk) begin
@@ -69,22 +72,22 @@ always @(posedge clk) begin
     case (rs)
       0: db_out <= pa_in;
       1: db_out <= pb_in;
-      2: db_out <= mc ? {cb, ca, irq, ilr} : pc_in;
+      2: db_out <= (MODEL && mc) ? {cb, ca, irq, ilr} : pc_in;
       3: db_out <= ddra;
       4: db_out <= ddrb;
       5: db_out <= ddrc;
-      6: db_out <= mode ? {crcb, crca, ie, ip, mc} : 8'h00;
-      7: db_out <= mode ? {3'b000, air[0]} : 8'h00;
+      6: db_out <= MODEL ? {crcb, crca, ie, ip, mc} : 8'h00;
+      7: db_out <= MODEL ? {3'b000, air[0]} : 8'h00;
     endcase
 end
 
 assign pa_oe = ddra;
 assign pb_oe = ddrb;
-assign pc_oe = mc ? 8'b11100000 : ddrc;
+assign pc_oe = (MODEL && mc) ? 8'b11100000 : ddrc;
 
 assign pa_out = pra | ~ddra;
 assign pb_out = prb | ~ddrb;
-assign pc_out = mc ? {cb, ca, ~irq, 5'b11111} : prc | ~ddrc;
+assign pc_out = (MODEL && mc) ? {cb, ca, ~irq, 5'b11111} : prc | ~ddrc;
 
 // Port A Output
 always @(posedge clk) begin
@@ -136,13 +139,13 @@ wire       irq = |air[0];
 
 // Interrupt control
 always @(posedge clk) begin
+  reg [CPULSETIME_BITS-1:0] cpcnt;
   reg [4:0] pc_in_r;
-  reg [5:0] pulsecnt;
 
   pc_in_r <= pc_in[4:0];
 
-  if (!res_n || !mode) begin
-    mc_r  <= 1'b0;
+  if (!res_n || !MODEL) begin
+    mc    <= 1'b0;
     ilr   <= 5'b0;
     air   <= '{0, 0, 0, 0, 0, 0};
     crcb  <= 2'b0;
@@ -151,18 +154,18 @@ always @(posedge clk) begin
     cb    <= 1'b0;
     ie    <= 1'b0;
     ip    <= 1'b0;
-    pulsecnt <= 0;
+    cpcnt <= 0;
   end
   else begin
     if (wr && rs == 6) begin
-      {crcb, crca, ie, ip, mc_r} <= db_in;
+      {crcb, crca, ie, ip, mc} <= db_in;
       ca <= db_in[4];
       cb <= db_in[6];
     end
     else if (mc) begin
-      if (pulsecnt) begin
-        pulsecnt <= pulsecnt - 1'b1;
-        if (pulsecnt == 1) begin
+      if (cpcnt) begin
+        cpcnt <= cpcnt - 1'b1;
+        if (cpcnt == 1) begin
           if (crca == 2'b01) ca <= 1'b1;
           if (crcb == 2'b01) cb <= 1'b1;
         end
@@ -172,11 +175,7 @@ always @(posedge clk) begin
         case (rs)
           0: if (!crca[1]) begin
               ca <= 1'b0;
-              if (!crca[0]) pulsecnt <= 17;
-          end
-          1: if (!crcb[1]) begin
-              cb <= 1'b0;
-              if (!crcb[0]) pulsecnt <= 17;
+              if (!crca[0]) cpcnt <= CPULSETIME_BITS'(CPULSETIME);
           end
           7: begin
               if (ip)
@@ -190,6 +189,10 @@ always @(posedge clk) begin
       end
       else if (wr) begin
         case (rs)
+          1: if (!crcb[1]) begin
+              cb <= 1'b0;
+              if (!crcb[0]) cpcnt <= CPULSETIME_BITS'(CPULSETIME);
+          end
           2: ilr <= ilr & db_in[4:0];
           7: if (ip) begin
               air[1:4] <= air[2:5];
@@ -230,7 +233,7 @@ always @(posedge clk) begin
     else begin
       ilr <= 5'b0;
       air <= '{0, 0, 0, 0, 0, 0};
-      pulsecnt <= 0;
+      cpcnt <= 0;
     end
   end
 end
