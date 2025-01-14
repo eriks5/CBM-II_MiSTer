@@ -176,7 +176,7 @@ reg        cpuSync;
 // ============================================================================
 
 wire irq_n = irq_tpi1 & irq_vic;
-wire rdy   = vicrdy; // & refrdy;
+wire rdy   = vicrdy & refrdy;
 
 cpu_6509 cpu (
    .widePO(0),
