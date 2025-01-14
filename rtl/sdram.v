@@ -66,13 +66,17 @@ localparam STATE_READ      = STATE_CMD_CONT + CAS_LATENCY + 1'd1;
 localparam STATE_LAST      = 3'd7;   // last state in cycle
 
 reg [2:0] q /* synthesis noprune */;
+reg ce_r, refresh_r;
 reg last_ce, last_refresh;
 always @(posedge clk) begin
-	last_ce <= ce;
-	last_refresh <= refresh;
+	ce_r <= ce;
+	last_ce <= ce_r;
+
+	refresh_r <= refresh;
+	last_refresh <= refresh_r;
 
 	// start a new cycle in rising edge of ce
-	if(ce && !last_ce) q <= 3'd1;
+	if(ce_r && !last_ce) q <= 3'd1;
 	if(q || reset) q <= q + 3'd1;
 end
 
@@ -80,13 +84,13 @@ end
 // --------------------------- startup/reset ---------------------------
 // ---------------------------------------------------------------------
 
-// wait 1ms (32 clkref cycles) after FPGA config is done before going
+// wait at least 1ms (36 clkref cycles) after FPGA config is done before going
 // into normal operation. Initialize the ram in the last 16 reset cycles (cycles 15-0)
-initial reset = 5'h1f;
+initial reset = 6'd35;
 
-reg [4:0] reset;
+reg [5:0] reset;
 always @(posedge clk) begin
-	if(init)	reset <= 5'h1f;
+	if(init)	reset <= 6'd35;
 	else if((q == STATE_LAST) && (reset != 0)) reset <= reset - 5'd1;
 end
 
@@ -140,9 +144,9 @@ always @(posedge clk) begin
 		end
 	end
 	else begin
-		if(refresh && !last_refresh) sd_cmd <= CMD_AUTO_REFRESH;
+		if(refresh_r && !last_refresh) sd_cmd <= CMD_AUTO_REFRESH;
 
-		if(ce && !last_ce) begin
+		if(ce_r && !last_ce) begin
 			sd_cmd  <= CMD_ACTIVE;
 			sd_ba   <= addr[22:21];
 			sd_addr <= addr[20:8];

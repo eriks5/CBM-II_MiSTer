@@ -139,12 +139,15 @@ always @(posedge clk_sys) begin
    if (preCycle == PHASE_END) begin
       preCycle <= PHASE_START;
       phase <= ~phase;
-      rfsh_cycle <= rfsh_cycle + 1'b1;
 
-      if (rfsh_cycle == 0) begin
+      if (phase) begin
          sysEnable <= ~pause;
          sys2MHz   <= cpu2MHz;
-         refresh   <= 1;
+      end
+
+      rfsh_cycle <= rfsh_cycle + 1'b1;
+      if (rfsh_cycle == 0) begin
+         refresh <= 1;
       end
 
       reset <= ~reset_n;
@@ -173,7 +176,7 @@ reg        cpuSync;
 // ============================================================================
 
 wire irq_n = irq_tpi1 & irq_vic;
-wire rdy   = vicrdy & refrdy;
+wire rdy   = vicrdy; // & refrdy;
 
 cpu_6509 cpu (
    .widePO(0),
