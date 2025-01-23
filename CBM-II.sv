@@ -265,14 +265,14 @@ localparam CONF_STR = {
 
 wire pll_locked;
 wire clk_sys;
-wire clk_dbl;
-wire clk48;
+wire clk_vid;
+wire clk_sdr;
 
 pll pll
 (
 	.refclk(CLK_50M),
-	.outclk_0(clk48),
-	.outclk_1(clk_dbl),
+	.outclk_0(clk_sdr),
+	.outclk_1(clk_vid),
 	.outclk_2(clk_sys),
 	.reconfig_to_pll(reconfig_to_pll),
 	.reconfig_from_pll(reconfig_from_pll),
@@ -710,7 +710,7 @@ sdram sdram
 	.sd_clk(SDRAM_CLK),
 	.sd_dqm({SDRAM_DQMH,SDRAM_DQML}),
 
-	.clk(clk_dbl),
+	.clk(clk_sdr),
 	.init(~pll_locked),
 	.refresh(refresh),
 	.addr(io_cycle ? io_cycle_addr : cpu_addr),
@@ -976,7 +976,7 @@ end
 
 wire scandoubler = status[20:18] || forced_scandoubler;
 
-assign CLK_VIDEO = clk_dbl;
+assign CLK_VIDEO = clk_vid;
 assign VGA_SL    = (status[20:18] > 2) ? status[19:18] - 2'd2 : 2'd0;
 assign VGA_F1    = 0;
 
