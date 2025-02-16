@@ -69,6 +69,8 @@ port (
 	-- Display interface
 	VSYNC		:	out	std_logic;
 	HSYNC		:	out	std_logic;
+	VBLANK	:	out	std_logic;
+	HBLANK	:	out	std_logic;
 	DE			:	out	std_logic;
 	CURSOR		:	out	std_logic;
 	LPSTB		:	in	std_logic;
@@ -143,12 +145,18 @@ signal cursor0			:	std_logic;
 signal cursor1			:	std_logic;
 signal cursor2			:	std_logic;
 
+signal hblank0			:	std_logic;
+signal hblank1			:	std_logic;
+signal hblank2			:	std_logic;
+
 
 begin
 	HSYNC <= hs; -- External HSYNC driven directly from internal signal
 	VSYNC <= vs; -- External VSYNC driven directly from internal signal
 
+	
 	de0 <= h_display and v_display;
+	hblank0 <= h_display;
 
     -- In Mode 7 DE Delay is set to 01, but in our implementation no delay is needed
     -- TODO: Fix SAA5050
@@ -156,6 +164,13 @@ begin
 		  de0 when r08_interlace(5 downto 4) = "01" else -- not accurate, should be de1
 		  de2 when r08_interlace(5 downto 4) = "10" else
 		  '0';
+
+	hblank <= not hblank0 when r08_interlace(5 downto 4) = "00" else
+		  not hblank0 when r08_interlace(5 downto 4) = "01" else
+		  not hblank2 when r08_interlace(5 downto 4) = "10" else
+		  '1';
+
+	vblank <= not v_display;
 
 	-- Cursor output generated combinatorially from the internal signal in
 	-- accordance with the currently selected cursor mode
@@ -339,7 +354,7 @@ begin
 						-- end of v_total_adj - it shouldn't make any difference to the
 						-- output
 						if r08_interlace(0) = '1' then
-							odd_field <= not odd_field;
+							--odd_field <= not odd_field;
 						else
 							odd_field <= '0';
 						end if;
@@ -405,7 +420,8 @@ begin
 		-- 6845 behaviour. i.e. in non-interlaced mode the start of vsync
 		-- coinscides with the start of the active display, and in intelaced
 		-- mode the vsync of the odd field is delayed by half a scan line
-		if (odd_field = '0' and h_counter = 0) or (odd_field = '1' and h_counter = "0" & r00_h_total(7 downto 1)) then
+		--if (odd_field = '0' and h_counter = 0) or (odd_field = '1' and h_counter = "0" & r00_h_total(7 downto 1)) then
+		if h_counter = r02_h_sync_pos then
 			v_sync_start <= '1';
 		end if;
 	end process;
@@ -558,10 +574,12 @@ begin
 	begin
 		if rising_edge(CLOCK) then
 			if CLKEN = '1' then
-				de1		<= de0;
-				de2		<= de1;
+				de1	  <= de0;
+				de2	  <= de1;
 				cursor1 <= cursor0;
-				cursor2 <= cursor1;
+				--cursor2 <= cursor1;
+				hblank1 <= hblank0;
+				hblank2 <= hblank1;
 			end if;
 		end if;
 	end process;

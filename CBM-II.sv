@@ -232,7 +232,7 @@ localparam CONF_STR = {
 	"P1O[14],Clear All RAM on Reset,Yes,No;",
 	"P1O[15],Pause When OSD is Open,No,Yes;",
 
-   "P2,Audio & Video;",
+	"P2,Audio & Video;",
 	"H2P2O[12],TV System,PAL,NTSC;",
 	"H2P2-;",
 	"P2O[17:16],Aspect Ratio,Original,Full Screen,[ARC1],[ARC2];",
@@ -245,12 +245,12 @@ localparam CONF_STR = {
 	"P2FC9,FLT,Load Custom Filters;",
 
 	"P3,External ROM/RAM;",
-   "P3O[24], Bank $1000,Disabled,RAM;",
-   "P3O[39:38], Bank $2000,Disabled,ROM,RAM;",
+	"P3O[24], Bank $1000,Disabled,RAM;",
+	"P3O[39:38], Bank $2000,Disabled,ROM,RAM;",
 	"h7P3FC3,ROMBIN,  Load Rom Bank $2000       ;",
-   "P3O[41:40], Bank $4000,Disabled,ROM,RAM;",
+	"P3O[41:40], Bank $4000,Disabled,ROM,RAM;",
 	"h8P3FC4,ROMBIN,  Load Rom Bank $4000       ;",
-   "P3O[43:42], Bank $6000,Disabled,ROM,RAM;",
+	"P3O[43:42], Bank $6000,Disabled,ROM,RAM;",
 	"h9P3FC5,ROMBIN,  Load Rom Bank $6000       ;",
 
 	"-;",
@@ -301,8 +301,8 @@ pll_cfg pll_cfg
 );
 
 wire [31:0] CLK = model ? 36_000_000
-                : ntsc  ? 32_727_266
-                :         31_527_954;
+					 : ntsc  ? 32_727_266
+					 :         31_527_954;
 
 always @(posedge CLK_50M) begin
 	reg ntscd = 0, ntscd2 = 0;
@@ -485,10 +485,10 @@ hps_io #(.CONF_STR(CONF_STR), .VDNUM(NDU), .BLKSZ(1)) hps_io
 	.img_size(img_size),
 	.img_readonly(img_readonly),
 
-   .ps2_key(ps2_key),
+	.ps2_key(ps2_key),
 	.ps2_mouse(ps2_mouse),
-   .ps2_kbd_led_status(ps2_kbd_led_status),
-   .ps2_kbd_led_use(ps2_kbd_led_use),
+	.ps2_kbd_led_status(ps2_kbd_led_status),
+	.ps2_kbd_led_use(ps2_kbd_led_use),
 
 	.joystick_0(joyA),
 	.joystick_1(joyB),
@@ -634,7 +634,7 @@ always @(posedge clk_sys) begin
 		erase_to <= erase_to + 1'b1;
 		if (&erase_to) begin
 			if ((ramsize == 0 && model == 0 && ioctl_load_addr == 'h01_FFFF) // 128k P
-		     ||(ramsize == 0 && model == 1 && ioctl_load_addr == 'h02_FFFF) // 128k B
+			  ||(ramsize == 0 && model == 1 && ioctl_load_addr == 'h02_FFFF) // 128k B
 			  ||(ramsize == 1 && model == 0 && ioctl_load_addr == 'h03_FFFF) // 256k P
 			  ||(ramsize == 1 && model == 1 && ioctl_load_addr == 'h04_FFFF) // 256k B
 			  ||(ioctl_load_addr == 'h0E_FFFF)                               // full
@@ -772,6 +772,7 @@ wire        pause;
 wire        refresh;
 wire  [7:0] r, g, b;
 wire        hsync, vsync;
+wire        hblank, vblank;
 
 wire [17:0] audio;
 
@@ -834,6 +835,8 @@ cbm2_main main (
 
 	.hsync(hsync),
 	.vsync(vsync),
+	.hblank(hblank),
+	.vblank(vblank),
 	.r(r),
 	.g(g),
 	.b(b),
@@ -842,7 +845,7 @@ cbm2_main main (
 
 	.sftlk_sense(sftlk_sense),
 
-   .erase_sram(erasing_sram),
+	.erase_sram(erasing_sram),
 	.rom_id  (!erasing_sram ? ioctl_index[5:0] : 0),
 	.rom_addr(!erasing_sram ? ioctl_addr : erase_sram_addr),
 	.rom_wr  (!erasing_sram ? (load_rom && !ioctl_addr[24:14] && ioctl_download && ioctl_wr) : 1'b1),
@@ -870,7 +873,7 @@ ieee_drive #(.DRIVES(NDRIVES)) ieee_drive
 
 	.clk_sys(clk_sys),
 	.reset({drive_reset | ((!status[49:48]) ? !drive_mounted[3:2] : status[49]),
-		     drive_reset | ((!status[47:46]) ? !drive_mounted[1:0] : status[47])}),
+			  drive_reset | ((!status[47:46]) ? !drive_mounted[1:0] : status[47])}),
 
 	.pause(pause),
 
@@ -917,61 +920,83 @@ assign USER_OUT[5] = cbm_iec_atn | ~ext_iec_en;
 // Video
 // ========================================================================
 
-wire hblank;
-wire vblank;
-wire hsync_out;
-wire vsync_out;
+wire hsync_vic;
+wire vsync_vic;
+wire hblank_vic;
+wire vblank_vic;
 
-video_sync sync
+video_sync_vic sync_vic
 (
 	.clk32(clk_sys),
-	.video_out(~model),
-	.bypass(0),
-	.pause(pause),
-	.wide(wide),
-
+	.pause(pause | model),
 	.hsync(hsync),
 	.vsync(vsync),
-
-	.hsync_out(hsync_out),
-	.vsync_out(vsync_out),
-	.hblank(hblank),
-	.vblank(vblank)
+	.ntsc(ntsc),
+	.wide(wide),
+	.hsync_out(hsync_vic),
+	.vsync_out(vsync_vic),
+	.hblank(hblank_vic),
+	.vblank(vblank_vic)
 );
+
+wire hsync_crtc;
+wire vsync_crtc;
+wire hblank_crtc;
+wire vblank_crtc;
+
+video_sync_crtc sync_crtc
+(
+	.clk32(clk_sys),
+	.ce_pix(ce_pix),
+	.hsync(hsync),
+	.vsync(vsync),
+	.hblank(hblank),
+	.vblank(vblank),
+	.hsync_out(hsync_crtc),
+	.vsync_out(vsync_crtc),
+	.hblank_out(hblank_crtc),
+	.vblank_out(vblank_crtc)
+);
+
+wire vsync_out  = model ? vsync_crtc  : vsync_vic;
+wire hsync_out  = model ? hsync_crtc  : hsync_vic;
+wire vblank_out = model ? vblank_crtc : vblank_vic;
+wire hblank_out = model ? hblank_crtc : hblank_vic;
 
 reg hq2x160;
 reg hq2x320;
-always @(posedge clk_sys) begin
-   reg old_vsync;
+always @(posedge CLK_VIDEO) begin
+	reg old_vsync;
 
-   old_vsync <= vsync_out;
-   if (!old_vsync && vsync_out) begin
-      hq2x320 <= (status[20:8] == 1);
-      hq2x160 <= (status[20:8] == 2);
-   end
+	old_vsync <= vsync_out;
+	if (!old_vsync && vsync_out) begin
+		hq2x320 <= (status[20:8] == 1);
+		hq2x160 <= (status[20:8] == 2);
+	end
 end
 
 reg ce_pix;
 always @(posedge CLK_VIDEO) begin
-   reg       model_r;
-   reg [1:0] div;
-   reg [1:0] lores;
+	reg       clk_r;
+	reg       hsync_r;
+	reg [1:0] div;
+	reg [1:0] lores;
+	reg       sync;
 
-   model_r <= model;
-   if (model != model_r) begin
-      div <= 0;
-      lores <= 0;
-      ce_pix <= 0;
-   end
-   else if (model) begin
-      div <= div + 1'd1;
-      ce_pix <= !div[0];
-   end
-   else begin
-      div <= div + 1'd1;
-      if (&div) lores <= lores + 1'd1;
-      ce_pix <= (~|lores | ~hq2x160) && (~lores[0] | ~hq2x320) && !div;
-   end
+	clk_r <= clk_sys;
+	hsync_r <= hsync;
+	if (!reset_n) begin
+		sync <= 0;
+		div <= 0;
+		lores <= 0;
+		ce_pix <= 0;
+	end
+	else if (sync || (hsync && !hsync_r)) begin
+		sync <= 1;
+		div <= div + 1'd1;
+		if (&div) lores <= lores + 1'd1;
+		ce_pix <= (~|lores | ~hq2x160) && (~lores[0] | ~hq2x320) && !div;
+	end
 end
 
 wire scandoubler = status[20:18] || forced_scandoubler;
@@ -992,8 +1017,8 @@ video_cleaner video_cleaner
 	.B(b),
 	.HSync(hsync_out),
 	.VSync(vsync_out),
-	.HBlank(hblank),
-	.VBlank(vblank),
+	.HBlank(hblank_out),
+	.VBlank(vblank_out),
 
 	.VGA_R(rc),
 	.VGA_G(gc),
@@ -1009,19 +1034,21 @@ reg wide;
 always @(posedge CLK_VIDEO) begin
 	vcrop <= 0;
 	wide <= 0;
-	if(HDMI_WIDTH >= (HDMI_HEIGHT + HDMI_HEIGHT[11:1]) && !scandoubler) begin
-		if(HDMI_HEIGHT == 480)  vcrop <= 240;
-		if(HDMI_HEIGHT == 600)  begin vcrop <= 200; wide <= vcrop_en; end
-		if(HDMI_HEIGHT == 720)  vcrop <= 240;
-		if(HDMI_HEIGHT == 768)  vcrop <= 256; // NTSC mode has 250 visible lines only!
-		if(HDMI_HEIGHT == 800)  begin vcrop <= 200; wide <= vcrop_en; end
-		if(HDMI_HEIGHT == 1080) vcrop <= 10'd216;
-		if(HDMI_HEIGHT == 1200) vcrop <= 240;
-	end
-	else if(HDMI_WIDTH >= 1440 && !scandoubler) begin
-		// 1920x1440 and 2048x1536 are 4:3 resolutions and won't fit in the previous if statement ( width > height * 1.5 )
-		if(HDMI_HEIGHT == 1440) vcrop <= 240;
-		if(HDMI_HEIGHT == 1536) vcrop <= 256;
+	if (!model) begin
+		if(HDMI_WIDTH >= (HDMI_HEIGHT + HDMI_HEIGHT[11:1]) && !scandoubler) begin
+			if(HDMI_HEIGHT == 480)  vcrop <= 10'd240;
+			if(HDMI_HEIGHT == 600)  begin vcrop <= 10'd200; wide <= vcrop_en; end
+			if(HDMI_HEIGHT == 720)  vcrop <= 10'd240;
+			if(HDMI_HEIGHT == 768)  vcrop <= 10'd256; // NTSC mode has 250 visible lines only!
+			if(HDMI_HEIGHT == 800)  begin vcrop <= 10'd200; wide <= vcrop_en; end
+			if(HDMI_HEIGHT == 1080) vcrop <= 10'd216;
+			if(HDMI_HEIGHT == 1200) vcrop <= 10'd240;
+		end
+		else if(HDMI_WIDTH >= 1440 && !scandoubler) begin
+			// 1920x1440 and 2048x1536 are 4:3 resolutions and won't fit in the previous if statement ( width > height * 1.5 )
+			if(HDMI_HEIGHT == 1440) vcrop <= 10'd240;
+			if(HDMI_HEIGHT == 1536) vcrop <= 10'd256;
+		end
 	end
 end
 
@@ -1032,8 +1059,10 @@ video_freak video_freak
 (
 	.*,
 	.VGA_DE_IN(vga_de),
-	.ARX((!ar) ? (wide ? 12'd340 : 12'd400) : (ar - 1'd1)),
-	.ARY((!ar) ? 12'd300 : 12'd0),
+	.ARX((!ar) ? (profile ? 12'd360 : (wide ? 12'd340 : 12'd400)) 
+				  : (ar - 1'd1)),
+	.ARY((!ar) ? (profile ? 12'd350 : 12'd300) 
+				  : 12'd0),
 	.CROP_SIZE(vcrop_en ? vcrop : 10'd0),
 	.CROP_OFF(0),
 	.SCALE(status[23:22])

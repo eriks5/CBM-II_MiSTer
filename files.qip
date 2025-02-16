@@ -18,5 +18,6 @@ set_global_assignment -name VERILOG_FILE rtl/sdram.v
 set_global_assignment -name QIP_FILE rtl/sid/sid.qip
 set_global_assignment -name QIP_FILE rtl/t65/t65.qip
 set_global_assignment -name VHDL_FILE rtl/video_vicII_656x.vhd
-set_global_assignment -name SYSTEMVERILOG_FILE rtl/video_sync.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/video_sync_crtc.sv
+set_global_assignment -name VHDL_FILE rtl/video_sync_vic.vhd
 set_global_assignment -name QIP_FILE rtl/ieee_drive/ieee_drive.qip

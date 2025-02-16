@@ -68,6 +68,8 @@ module cbm2_main (
 
    output             hsync,
    output             vsync,
+   output             hblank,
+   output             vblank,
    output       [7:0] r,
    output       [7:0] g,
    output       [7:0] b,
@@ -143,14 +145,13 @@ always @(posedge clk_sys) begin
       if (phase) begin
          sysEnable <= ~pause;
          sys2MHz   <= cpu2MHz;
+         reset     <= ~reset_n;
       end
 
       rfsh_cycle <= rfsh_cycle + 1'b1;
       if (rfsh_cycle == 0) begin
          refresh <= 1;
       end
-
-      reset <= ~reset_n;
    end
 end
 
@@ -255,8 +256,8 @@ video_vicii_656x #(
    .ba(baLoc),
 
    .mode6569(~ntsc),
-   .mode6567old(0),
-   .mode6567R8(ntsc),
+   .mode6567old(ntsc),
+   .mode6567R8(0),
    .mode6572(0),
    .variant(2'b00),
 
@@ -298,6 +299,8 @@ reg  [4:0] crtcRa;
 
 reg        crtcVsync;
 reg        crtcHsync;
+reg        crtcHblank;
+reg        crtcVblank;
 reg        crtcDE;
 reg        crtcCursor;
 
@@ -314,6 +317,8 @@ mc6845 crtc (
 
    .VSYNC(crtcVsync),
    .HSYNC(crtcHsync),
+   .VBLANK(crtcVblank),
+   .HBLANK(crtcHblank),
    .DE(crtcDE),
    .LPSTB(0),
    .CURSOR(crtcCursor),
@@ -337,7 +342,7 @@ chargen chargen (
    .rom_data(rom_data)
 );
 
-reg        crtcOut;
+reg crtcOut;
 
 always @(posedge clk_sys) begin
    reg [7:0] dot;
@@ -366,11 +371,13 @@ wire  [7:0] crtcB = crtcOut ? 8'h00 : 8'h00;
 // Video mux
 // ============================================================================
 
-assign r     = model ? crtcR     : vicR;
-assign g     = model ? crtcG     : vicG;
-assign b     = model ? crtcB     : vicB;
-assign hsync = model ? crtcHsync : vicHSync;
-assign vsync = model ? crtcVsync : vicVSync;
+assign r      = model ? crtcR      : vicR;
+assign g      = model ? crtcG      : vicG;
+assign b      = model ? crtcB      : vicB;
+assign hsync  = model ? crtcHsync  : vicHSync;
+assign vsync  = model ? crtcVsync  : vicVSync;
+assign hblank = model ? crtcHblank : vicHSync;
+assign vblank = model ? crtcVblank : vicVSync;
 
 // ============================================================================
 // SID
