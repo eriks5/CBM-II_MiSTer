@@ -1,14 +1,13 @@
 //============================================================================
 //
-//  CBM-II BL/BH Video sync
+//  CBM-II CRTC Video sync adjust
 //  Copyright (C) 2025 Erik Scheffers
 //
 //============================================================================
 
 module video_sync_crtc
 (
-	input        clk32,
-	input        ce_pix,
+	input        clk,
 
 	input        hsync,
 	input        vsync,
@@ -21,19 +20,23 @@ module video_sync_crtc
 	output       vblank_out
 );
 
-localparam HBLANK_DELAY = 3;
+localparam HBLANK_DELAY = 7;
 
 assign hsync_out  = hsync;
 assign vsync_out  = vsync;
-assign hblank_out = hblank_delay[HBLANK_DELAY-1];
 assign vblank_out = vblank;
 
-reg [HBLANK_DELAY-1:0] hblank_delay;
+always @(posedge clk) begin
+	integer hblank_delay;
 
-always @(posedge clk32) begin
-	if (ce_pix) begin
-		hblank_delay[HBLANK_DELAY-1:1] <= hblank_delay[HBLANK_DELAY-2:0];
-		hblank_delay[0] <= hblank;
+	if (hblank != hblank_out) begin
+		if (!hblank_delay)
+			hblank_delay <= HBLANK_DELAY;
+		else
+			hblank_delay <= hblank_delay - 1;
+
+		if (hblank_delay == 1)
+			hblank_out <= hblank;
 	end
 end
 

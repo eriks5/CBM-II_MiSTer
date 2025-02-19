@@ -946,8 +946,7 @@ wire vblank_crtc;
 
 video_sync_crtc sync_crtc
 (
-	.clk32(clk_sys),
-	.ce_pix(ce_pix),
+	.clk(clk_sys),
 	.hsync(hsync),
 	.vsync(vsync),
 	.hblank(hblank),
@@ -963,36 +962,22 @@ wire hsync_out  = model ? hsync_crtc  : hsync_vic;
 wire vblank_out = model ? vblank_crtc : vblank_vic;
 wire hblank_out = model ? hblank_crtc : hblank_vic;
 
-reg hq2x160;
-reg hq2x320;
-always @(posedge CLK_VIDEO) begin
-	reg old_vsync;
-
-	old_vsync <= vsync_out;
-	if (!old_vsync && vsync_out) begin
-		hq2x320 <= (status[20:8] == 1);
-		hq2x160 <= (status[20:8] == 2);
-	end
-end
-
+reg hq2x320, hq2x160;
 reg ce_pix;
 always @(posedge CLK_VIDEO) begin
-	reg       clk_r;
-	reg       hsync_r;
+	reg [1:0] vsync_r;
 	reg [1:0] div;
 	reg [1:0] lores;
-	reg       sync;
 
-	clk_r <= clk_sys;
-	hsync_r <= hsync;
-	if (!reset_n) begin
-		sync <= 0;
+	vsync_r <= {vsync_r[0], vsync};
+	if (vsync_r == 'b01) begin
+		hq2x320 <= (status[20:18] == 1) || !model;
+		hq2x160 <= (status[20:18] == 2);
 		div <= 0;
 		lores <= 0;
 		ce_pix <= 0;
 	end
-	else if (sync || (hsync && !hsync_r)) begin
-		sync <= 1;
+	else begin
 		div <= div + 1'd1;
 		if (&div) lores <= lores + 1'd1;
 		ce_pix <= (~|lores | ~hq2x160) && (~lores[0] | ~hq2x320) && !div;
@@ -1006,7 +991,7 @@ assign VGA_SL    = (status[20:18] > 2) ? status[19:18] - 2'd2 : 2'd0;
 assign VGA_F1    = 0;
 
 wire [7:0] rc, gc, bc;
-wire vsc,hsc,hblc,vblc;
+wire vsc,hsc,hblc,vblc,vdec;
 video_cleaner video_cleaner
 (
 	.clk_vid(CLK_VIDEO),
@@ -1019,6 +1004,7 @@ video_cleaner video_cleaner
 	.VSync(vsync_out),
 	.HBlank(hblank_out),
 	.VBlank(vblank_out),
+	.DE_in(vga_de),
 
 	.VGA_R(rc),
 	.VGA_G(gc),
@@ -1026,7 +1012,8 @@ video_cleaner video_cleaner
 	.VGA_VS(vsc),
 	.VGA_HS(hsc),
 	.HBlank_out(hblc),
-	.VBlank_out(vblc)
+	.VBlank_out(vblc),
+	.DE_out(vdec)
 );
 
 reg [9:0] vcrop;
@@ -1058,11 +1045,9 @@ wire vga_de;
 video_freak video_freak
 (
 	.*,
-	.VGA_DE_IN(vga_de),
-	.ARX((!ar) ? (profile ? 12'd360 : (wide ? 12'd340 : 12'd400)) 
-				  : (ar - 1'd1)),
-	.ARY((!ar) ? (profile ? 12'd350 : 12'd300) 
-				  : 12'd0),
+	.VGA_DE_IN(vdec),
+	.ARX((!ar) ? (wide ? 12'd340 : 12'd400) : (ar - 1'd1)),
+	.ARY((!ar) ? 12'd300 : 12'd0),
 	.CROP_SIZE(vcrop_en ? vcrop : 10'd0),
 	.CROP_OFF(0),
 	.SCALE(status[23:22])
