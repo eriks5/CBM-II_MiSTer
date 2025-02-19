@@ -18,6 +18,7 @@ port(
 	hsync : in std_logic;
 	vsync : in std_logic;
 	ntsc  : in std_logic;
+	ntscOld: in std_logic;
 	wide  : in std_logic;
 	hsync_out : out std_logic;
 	vsync_out : out std_logic;
@@ -69,8 +70,8 @@ process(clk32)
 			if vsync_r = '0' and vsync = '1' then
 				line_reset := '1';
 			end if;
-			
-			if ntsc = '1' then
+
+			if ntsc = '1' or ntscOld = '1' then
 				if dot_count     = 054 then hsync_out <= '0'; end if;
 				if dot_count     = 016 then hsync_out <= '1';
 					if line_count = 000 then vsync_out <= '1'; end if;
@@ -81,11 +82,13 @@ process(clk32)
 				if line_count = 013 then vblank <= '0'; end if;
 
 				if wide = '0' then
-					if dot_count  = 508 then hblank <= '1'; end if;
-					if dot_count  = 112 then hblank <= '0'; end if;
+					if dot_count  = 516 and ntscOld = '0' then hblank <= '1'; end if;
+					if dot_count  = 508 and ntscOld = '1' then hblank <= '1'; end if;
+					if dot_count  = 112                   then hblank <= '0'; end if;
 				else
-					if dot_count  = 488 then hblank <= '1'; end if;
-					if dot_count  = 132 then hblank <= '0'; end if;
+					if dot_count  = 496 and ntscOld = '0' then hblank <= '1'; end if;
+					if dot_count  = 488 and ntscOld = '1' then hblank <= '1'; end if;
+					if dot_count  = 132                   then hblank <= '0'; end if;
 				end if;
 			else
 				if dot_count     = 048 then hsync_out <= '0'; end if;

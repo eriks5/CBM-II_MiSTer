@@ -191,7 +191,7 @@ localparam NDRIVES=2;
 // 0         1         2         3          4         5         6
 // 01234567890123456789012345678901 23456789012345678901234567890123
 // 0123456789ABCDEFGHIJKLMNOPQRSTUV 0123456789ABCDEFGHIJKLMNOPQRSTUV
-// XXXXXXX  XXXXXXXXXXXXXXXX XXXXXX XXXXXXXXXXXXXXXXXXXX
+// XXXXXXX  XXXXXXXXXXXXXXXXXXXXXXX XXXXXXXXXXXXXXXXXXXX
 
 `include "build_id.v"
 localparam CONF_STR = {
@@ -234,6 +234,7 @@ localparam CONF_STR = {
 
 	"P2,Audio & Video;",
 	"H2P2O[12],TV System,PAL,NTSC;",
+	"H1P2O[25],VIC-II Revision,Early,Later;",
 	"H2P2-;",
 	"P2O[17:16],Aspect Ratio,Original,Full Screen,[ARC1],[ARC2];",
 	"P2O[20:18],Scandoubler Fx,None,HQ2x-320,HQ2x-160,CRT 25%,CRT 50%,CRT 75%;",
@@ -383,7 +384,7 @@ always @(posedge clk_sys) begin
 
 		reset_counter <= 100000;
 	end
-	else if (ntsc_r != ntsc || status[1] || buttons[1])
+	else if (status[1] || buttons[1])
 		reset_counter <= 255;
 	else if (ioctl_download && load_rom) begin
 		do_erase <= status[14];
@@ -525,6 +526,7 @@ wire       profile = cfgcust ? status[6]    : model7x0;           // 0=P/L, 1=H
 wire [1:0] ramsize = cfgcust ? status[10:9] : {1'b0, ~modelx10};  // 0=128k, 1=256k, 2=896k
 wire       cpu2MHz = cfgcust ? status[11]   : model;              // 0=1MHz, 1=2MHz
 wire       ntsc    = status[12] | model7x0;                       // 0=PAL/50, 1=NTSC/60
+wire       newVic  = status[25];                                  // 0=early, 1=modern
 
 // ========================================================================
 // I/O
@@ -785,6 +787,7 @@ cbm2_main main (
 	.model(model),
 	.profile(profile),
 	.ntsc(ntsc),
+	.newVic(newVic),
 	.cpu2MHz(cpu2MHz),
 	.ramSize(ramsize),
 	.extbankrom({status[42], status[40], status[38]}),
@@ -931,7 +934,8 @@ video_sync_vic sync_vic
 	.pause(pause | model),
 	.hsync(hsync),
 	.vsync(vsync),
-	.ntsc(ntsc),
+	.ntsc(ntsc & newVic),
+	.ntscOld(ntsc & ~newVic),
 	.wide(wide),
 	.hsync_out(hsync_vic),
 	.vsync_out(vsync_vic),

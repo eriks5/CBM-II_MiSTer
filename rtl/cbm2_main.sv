@@ -17,6 +17,7 @@ module cbm2_main (
    input              model,     // 0=Professional, 1=Business
    input              profile,   // 0=Low, 1=High (Business only)
    input              ntsc,      // 0=PAL, 1=NTSC
+   input              newVic,    // 0=6567R56A/6569R1 VIC-II, 1=later revs
    input              cpu2MHz,   // 0=1MHz, 1=2MHz CPU
    input        [1:0] ramSize,   // 0=128k, 1=256k, 2=896k
    input        [1:0] copro,
@@ -256,8 +257,8 @@ video_vicii_656x #(
    .ba(baLoc),
 
    .mode6569(~ntsc),
-   .mode6567old(ntsc),
-   .mode6567R8(0),
+   .mode6567old(ntsc & ~newVic),
+   .mode6567R8(ntsc & newVic),
    .mode6572(0),
    .variant(2'b00),
 
@@ -284,6 +285,7 @@ video_vicii_656x #(
 
 fpga64_rgbcolor vic_colors (
    .index(vicColorIndex),
+   .newVic(newVic),
    .r(vicR),
    .g(vicG),
    .b(vicB)
