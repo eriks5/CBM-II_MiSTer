@@ -15,6 +15,7 @@ MiSTer FPGA core for the [Commodore CBM-II line of 8-bit computers](http://cbmst
 * Direct file injection (*.PRG)
 * Joystick/paddle/mouse support (P500 model)
 * 4040/8250 IEEE disk drives (supporting D64, D80 and D82 disk images)
+* Loadable system and drive ROMs
 * Optional external RAM in segment 15.
 * Optional external ROM at location $2000, $4000 and $6000 in segment 15.
 * External IEC through USER_IO port (requires modified kernal or external ROM)
@@ -39,6 +40,38 @@ The following PC keys are mapped to the special CBM-II keys:
 * <kbd>F11</kbd> &rArr; <kbd>C=</kbd>
 * <kbd>Alt</kbd>+Numpad <kbd>0</kbd> &rArr; <kbd>00</kbd>
 * <kbd>Alt</kbd>+Numpad <kbd>/</kbd> &rArr; <kbd>?</kbd>
+
+## Loadable ROM
+
+The core needs three boot ROMs with the Basic, Kernal and character set ROM for each machine type.
+
+`boot0.rom` contains the ROMs for the Professional model (P500),
+`boot1.rom` contains the ROMs for the Low Profile Business model (B6x0), and
+`boot2.rom` contains the ROMs for the High Profile Business model (B7x0).
+
+The layout of these three ROM files is identical:
+
+* `0000`-`3FFF` Basic 128 *(16 KiB)*
+* `4000`-`7FFF` Basic 256 *(16 KiB)*
+* `8000`-`9FFF` Kernal *(8 KiB)*
+* `A000`-`AFFF` Character set *(4 KiB)*
+
+For the Professional model, only Basic 128 exists. In that case, the Basic 256 is replaced with a copy
+of Basic 128.
+
+From the "ROM/RAM Configuration" menu custom system ROMs can be loaded, these have the same layout as
+the boot ROMs described above.
+
+From that menu it is also possible to load custom ROMs for the 4040 and 8250 disk drives. The layout 
+of these ROMs is as follows:
+
+* `0000`-`3FFF` DOS ROM *(16 KiB)*
+* `4000`-`47FF` Controller ROM *(2 KiB)*
+
+The DOS ROM can be up to 16 KiB, however the standard 4040 DOS ROM is only 12 KiB.
+In that case, the first 4 KiB of the ROM should be padded with `FF` bytes to align the ROM properly.
+When the Controller ROM is only 1 KiB, the first 1 KiB should be padded with `FF` bytes to align the
+ROM properly.
 
 ## Acknowlegements
 

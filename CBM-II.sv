@@ -191,7 +191,7 @@ localparam NDRIVES=2;
 // 0         1         2         3          4         5         6
 // 01234567890123456789012345678901 23456789012345678901234567890123
 // 0123456789ABCDEFGHIJKLMNOPQRSTUV 0123456789ABCDEFGHIJKLMNOPQRSTUV
-// XXXXXXX  XXXXXXXXXXXXXXXXXXXXXXX XXXXXXXXXXXXXXXXXXXX
+// XXXXXXX  XXXXXXXXXXXXXXX XXXXXXX XXXXXXXXXX  XXXXXXXX
 
 `include "build_id.v"
 localparam CONF_STR = {
@@ -208,7 +208,7 @@ localparam CONF_STR = {
 	"HBhDS2,D64, Mount #9.0;",
 	"HBhDS3,D64, Mount #9.1;",
 	"HB-;",
-	"F2,PRG;",
+	"F9,PRG;",
 	"-;",
 
 	"P1,Hardware;",
@@ -243,16 +243,25 @@ localparam CONF_STR = {
 	"P2-;",
 	"P2O[28:26],SID Filter,Default,Custom 1,Custom 2,Custom 3,Adjustable;",
 	"D5P2O[31:29],Fc Offset,0,1,2,3,4,5;",
-	"P2FC9,FLT,Load Custom Filters;",
 
-	"P3,External ROM/RAM;",
-	"P3O[24], Bank $1000,Disabled,RAM;",
-	"P3O[39:38], Bank $2000,Disabled,ROM,RAM;",
-	"h7P3FC3,ROMBIN,  Load Rom Bank $2000       ;",
-	"P3O[41:40], Bank $4000,Disabled,ROM,RAM;",
-	"h8P3FC4,ROMBIN,  Load Rom Bank $4000       ;",
-	"P3O[43:42], Bank $6000,Disabled,ROM,RAM;",
-	"h9P3FC5,ROMBIN,  Load Rom Bank $6000       ;",
+	"P3,ROM/RAM Configuration;",
+	"P3-,System ROM;",
+	"P3FC1,ROMBIN, P500            ;",
+	"P3FC2,ROMBIN, B6x0            ;",
+	"P3FC3,ROMBIN, B7x0            ;",
+	"P3-;",
+	"P3-,External ROM/RAM (Seg 15);",
+	"P3O[38], $0800-1FFF,Disabled,RAM;",
+	"P3O[39], $2000-3FFF,ROM,RAM;",
+	"D7P3FC4,ROMBIN,  Load;",
+	"P3O[40], $4000-5FFF,ROM,RAM;",
+	"D8P3FC5,ROMBIN,  Load;",
+	"P3O[41], $6000-7FFF,ROM,RAM;",
+	"D9P3FC6,ROMBIN,  Load;",
+	"P3-;",
+	"P3-,Drive ROM;",
+	"P3FC7,ROMBIN, 4040            ;",
+	"P3FC8,ROMBIN, 8250            ;",
 
 	"-;",
  	"R[0],Hard reset;",
@@ -365,43 +374,36 @@ always @(posedge clk_sys) begin
 	integer   reset_counter;
 	reg [8:0] cfg_r;
 	reg       ntsc_r;
-	reg       do_erase = 1;
-	reg [1:0] do_erase_sram = 2; // 0 - no, 1 - seg 15 bank0+ vidram, 2 - all sram
+	reg [1:0] do_erase = 2; // 0 - no, 1 - only sram seg 15 bank0+vidram, 2 - all ram
 
 	cfg_r <= status[10:2];
 	ntsc_r <= ntsc;
 
 	reset_n <= !reset_counter;
-	sys_reset_n <= !(reset_counter && do_erase_sram);
+	sys_reset_n <= !(reset_counter && do_erase);
 
 	if (RESET || (cfg_r != status[10:2]) || status[0] || !pll_locked) begin
-		do_erase <= do_erase | status[14] | RESET;
-
 		if (RESET)
-			do_erase_sram <= 2'd2;
-		else if (do_erase < 2)
-			do_erase_sram <= status[14] ? 2'd1 : 2'd2;
+			do_erase <= 2'd2;
+		else
+			do_erase <= status[14] ? 2'd1 : 2'd2;
 
 		reset_counter <= 100000;
 	end
 	else if (status[1] || buttons[1])
 		reset_counter <= 255;
 	else if (ioctl_download && load_rom) begin
-		do_erase <= status[14];
-		do_erase_sram <= status[14] ? 2'd1 : 2'd2;
+		do_erase <= status[14] ? 2'd1 : 2'd2;
 		reset_counter <= 255;
 	end
 	else if (erasing) force_erase <= 0;
-	else if (erasing_sram) force_erase_sram <= 0;
 	else if (!reset_counter) begin
 		do_erase <= 0;
-		do_erase_sram <= 0;
 	end
 	else if (reset_counter) begin
 		reset_counter <= reset_counter - 1;
 		if (reset_counter == 100) begin
 			force_erase <= do_erase;
-			force_erase_sram <= do_erase_sram;
 		end
 	end
 end
@@ -457,9 +459,9 @@ hps_io #(.CONF_STR(CONF_STR), .VDNUM(NDU), .BLKSZ(1)) hps_io
 		/* C */ status[50], // drive #8 type
 		/* B */ status[49], // drive #9 enabled
 		/* A */ status[47], // drive #8 enabled
-		/* 9 */ status[42],
+		/* 9 */ status[41],
 		/* 8 */ status[40],
-		/* 7 */ status[38],
+		/* 7 */ status[39],
 		/* 6 */ joy_en,
 		/* 5 */ ~status[28],
 		/* 4 */ 1'b0,
@@ -509,9 +511,16 @@ hps_io #(.CONF_STR(CONF_STR), .VDNUM(NDU), .BLKSZ(1)) hps_io
 	.ioctl_wait(ioctl_req_wr|reset_wait)
 );
 
-wire load_prg = ioctl_index[5:0] == 2;
-wire load_rom = ioctl_index[5:0] >= 3 && ioctl_index[5:0] < 9;
-wire load_flt = ioctl_index[5:0] == 9;
+wire load_rom      = ioctl_index[5:0] < 7;
+wire load_rom_p500 = ioctl_index == 1 || ioctl_index == {2'd0, 6'd0};
+wire load_rom_b6x0 = ioctl_index == 2 || ioctl_index == {2'd1, 6'd0};
+wire load_rom_b7x0 = ioctl_index == 3 || ioctl_index == {2'd2, 6'd0};
+wire load_rom_2000 = ioctl_index == 4;
+wire load_rom_4000 = ioctl_index == 5;
+wire load_rom_6000 = ioctl_index == 6;
+wire load_drv_4040 = ioctl_index == 7;
+wire load_drv_8250 = ioctl_index == 8;
+wire load_prg      = ioctl_index == 9;
 
 // System configuration
 wire       model500 = status[4:2] == 0;
@@ -532,7 +541,7 @@ wire       newVic  = status[25];                                  // 0=early, 1=
 // I/O
 // ========================================================================
 
-reg        erasing, force_erase;
+reg  [1:0] erasing, force_erase;
 
 reg [24:0] ioctl_load_addr;
 reg        ioctl_req_wr;
@@ -545,6 +554,9 @@ reg        io_cycle_we;
 reg [24:0] io_cycle_addr;
 reg  [7:0] io_cycle_data;
 
+reg        chrgen_wr;
+reg  [2:0] extbankrom = 0;
+
 always @(posedge clk_sys) begin
 	reg  [4:0] erase_to;
 	reg        old_download;
@@ -554,6 +566,7 @@ always @(posedge clk_sys) begin
 
 	old_download <= ioctl_download;
 	io_cycleD <= io_cycle;
+	chrgen_wr <= 0;
 
 	if (~io_cycle & io_cycleD) begin
 		io_cycle_ce <= 1;
@@ -576,7 +589,50 @@ always @(posedge clk_sys) begin
 	if (io_cycle & ~io_cycleD) io_cycle_ce <= 0;
 
 	if (ioctl_wr) begin
-		if (load_prg) begin
+		if (load_rom_2000) begin
+			extbankrom[0] <= 1;
+			if (ioctl_addr == 0)
+				ioctl_load_addr <= 25'h103_2000;
+			if (ioctl_addr < 'h2000)
+				ioctl_req_wr <= 1;
+		end
+		else if (load_rom_4000) begin
+			extbankrom[1] <= 1;
+			if (ioctl_addr == 0)
+				ioctl_load_addr <= 25'h103_4000;
+			if (ioctl_addr < 'h2000)
+				ioctl_req_wr <= 1;
+		end
+		else if (load_rom_6000) begin
+			extbankrom[2] <= 1;
+			if (ioctl_addr == 0)
+				ioctl_load_addr <= 25'h103_6000;
+			if (ioctl_addr < 'h2000)
+				ioctl_req_wr <= 1;
+		end
+		else if (load_rom_p500) begin
+			if (ioctl_addr == 0)
+				ioctl_load_addr <= 25'h102_0000;
+			if (ioctl_addr < 'hB000)
+				ioctl_req_wr <= 1;
+		end
+		else if (load_rom_b6x0) begin
+			if (ioctl_addr == 0)
+				ioctl_load_addr <= 25'h100_0000;
+			if (ioctl_addr < 'hB000) begin
+				ioctl_req_wr <= 1;
+				if (ioctl_addr[15:12] == 'hA) chrgen_wr <= 1;
+			end
+		end
+		else if (load_rom_b7x0) begin
+			if (ioctl_addr == 0)
+				ioctl_load_addr <= 25'h101_0000;
+			if (ioctl_addr < 'hB000) begin
+				ioctl_req_wr <= 1;
+				if (ioctl_addr[15:12] == 'hA) chrgen_wr <= 1;
+			end
+		end
+		else if (load_prg) begin
 			if (ioctl_addr == 0) begin
 				ioctl_load_addr[24:16] <= model ? 9'd1 : 9'd0;
 				ioctl_load_addr[7:0] <= ioctl_data;
@@ -629,65 +685,30 @@ always @(posedge clk_sys) begin
 
 	if (!erasing && force_erase) begin
 		erasing <= force_erase;
-		ioctl_load_addr <= model ? 25'h01_0000 : 25'h00_0000;
+		if (force_erase == 2)
+			ioctl_load_addr <= model ? 25'h01_0000 : 25'h00_0000;
+		else
+			ioctl_load_addr <= 25'h0F_0000;
 	end
 
 	if (erasing && !ioctl_req_wr) begin
 		erase_to <= erase_to + 1'b1;
 		if (&erase_to) begin
+			ioctl_req_wr <= 1;
 			if ((ramsize == 0 && model == 0 && ioctl_load_addr == 'h01_FFFF) // 128k P
 			  ||(ramsize == 0 && model == 1 && ioctl_load_addr == 'h02_FFFF) // 128k B
 			  ||(ramsize == 1 && model == 0 && ioctl_load_addr == 'h03_FFFF) // 256k P
 			  ||(ramsize == 1 && model == 1 && ioctl_load_addr == 'h04_FFFF) // 256k B
-			  ||(ioctl_load_addr == 'h0E_FFFF)                               // full
-			)
+			) begin
+				ioctl_load_addr <= 'h0F_0000;
+			end
+			else if (erasing == 1 && ioctl_load_addr == 'h0F_0FFF) begin
+				ioctl_load_addr <= 'h0F_D000;
+			end
+			else if (ioctl_load_addr == 'h0F_D7FF) begin
 				erasing <= 0;
-			else
-				ioctl_req_wr <= 1;
-		end
-	end
-end
-
-reg [11:0] sid_ld_addr = 0;
-reg [15:0] sid_ld_data = 0;
-reg        sid_ld_wr   = 0;
-always @(posedge clk_sys) begin
-	sid_ld_wr <= 0;
-	if(ioctl_wr && load_flt && ioctl_addr < 6144) begin
-		if(ioctl_addr[0]) begin
-			sid_ld_data[15:8] <= ioctl_data;
-			sid_ld_addr <= ioctl_addr[12:1];
-			sid_ld_wr <= 1;
-		end
-		else begin
-			sid_ld_data[7:0] <= ioctl_data;
-		end
-	end
-end
-
-// ========================================================================
-// Static RAM
-// ========================================================================
-
-reg  [1:0] erasing_sram, force_erase_sram;
-reg [12:0] erase_sram_addr;
-
-always @(posedge clk_sys) begin
-	reg [4:0] erase_to;
-
-	if (force_erase_sram) begin
-		erasing_sram <= force_erase_sram;
-		erase_sram_addr <= 0;
-		erase_to <= 0;
-	end
-
-	if (erasing_sram) begin
-		erase_to <= erase_to + 1'b1;
-		if (&erase_to) begin
-			if (erase_sram_addr == {erasing_sram[1],12'hFFF})
-				erasing_sram <= 0;
-			else
-				erase_sram_addr <= erase_sram_addr + 1'b1;
+				ioctl_req_wr <= 0;
+			end
 		end
 	end
 end
@@ -790,8 +811,8 @@ cbm2_main main (
 	.newVic(newVic),
 	.cpu2MHz(cpu2MHz),
 	.ramSize(ramsize),
-	.extbankrom({status[42], status[40], status[38]}),
-	.extbankram({status[43], status[41], status[39], status[24]}),
+	.extbankrom(extbankrom),
+	.extbankram(status[41:38]),
 
 	.pause(freeze),
 	.pause_out(pause),
@@ -812,9 +833,6 @@ cbm2_main main (
 	.pot4(pd34_mode[1] ? paddle_4 : pd34_mode[0] ? mouse_y : {8{joyB_cbm[6]}}),
 
 	.sid_ld_clk(clk_sys),
-	.sid_ld_addr(sid_ld_addr),
-	.sid_ld_data(sid_ld_data),
-	.sid_ld_wr(sid_ld_wr),
 	.sid_cfg(status[27:26]),
 	.sid_fc_off(status[28] ? (13'h600 - {status[31:29],7'd0}) : 13'd0),
 
@@ -848,11 +866,12 @@ cbm2_main main (
 
 	.sftlk_sense(sftlk_sense),
 
-	.erase_sram(erasing_sram),
-	.rom_id  (!erasing_sram ? ioctl_index[5:0] : 0),
-	.rom_addr(!erasing_sram ? ioctl_addr : erase_sram_addr),
-	.rom_wr  (!erasing_sram ? (load_rom && !ioctl_addr[24:14] && ioctl_download && ioctl_wr) : 1'b1),
-	.rom_data(!erasing_sram ? ioctl_data : {8{erase_sram_addr[6]}})
+	.erase_colram(erasing && ioctl_load_addr[24:12] == 'h00F_D4 && ioctl_load_addr[11:10] == 0),
+	.erase_colram_addr(ioctl_load_addr[9:0]),
+
+	.chrgen_wr(chrgen_wr),
+	.chrgen_addr({ioctl_load_addr[16], ioctl_load_addr[12:0]}),
+	.chrgen_data(ioctl_data)
 );
 
 // ========================================================================
@@ -899,7 +918,12 @@ ieee_drive #(.DRIVES(NDRIVES)) ieee_drive
 
 	.img_mounted(img_mounted),
 	.img_readonly(img_readonly),
-	.img_size(img_size)
+	.img_size(img_size),
+
+	.rom_wr((load_drv_4040 || load_drv_8250) && ioctl_download && ioctl_wr && !ioctl_addr[24:15]),
+	.rom_sel(load_drv_4040),
+	.rom_addr(ioctl_addr[14:0]),
+	.rom_data(ioctl_data)
 );
 
 // ========================================================================

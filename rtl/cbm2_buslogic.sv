@@ -25,11 +25,8 @@ module cbm2_buslogic (
    input         clk_sys,
    input         reset,
 
-   input   [1:0] erase_sram,
-   input   [5:0] rom_id,
-   input  [13:0] rom_addr,
-   input         rom_wr,
-   input   [7:0] rom_data,
+   input         erase_colram,
+   input   [9:0] erase_colram_addr,
 
    input         phase,
 
@@ -75,156 +72,15 @@ module cbm2_buslogic (
    input   [7:0] tpi2Data
 );
 
-reg cs_bank2, cs_bank4, cs_bank6, cs_rom8, cs_romC, cs_romE;
-reg cs_sram, cs_vidram, cs_colram;
+wire [8:0] modelRomBank = {7'b1_0000_00, ~model, model & profile};
 
-wire [7:0] bank2Data;
-rom_mem #(8,13) bank_2000
-(
-   .clock_a(clk_sys),
-   .address_a(systemAddr),
-   .q_a(bank2Data),
-   .data_a(cpuDo),
-   .wren_a(systemWe & extbankram[1] & cs_bank2),
-
-   .clock_b(clk_sys),
-   .address_b(rom_addr),
-   .data_b(rom_data),
-   .wren_b(rom_wr && (extbankram[1] ? erase_sram[1] : rom_id==3 && !rom_addr[13]))
-);
-
-wire [7:0] bank4Data;
-rom_mem #(8,13) bank_4000
-(
-   .clock_a(clk_sys),
-   .address_a(systemAddr),
-   .q_a(bank4Data),
-   .data_a(cpuDo),
-   .wren_a(systemWe & extbankram[2] & cs_bank4),
-
-   .clock_b(clk_sys),
-   .address_b(rom_addr),
-   .data_b(rom_data),
-   .wren_b(rom_wr && (extbankram[2] ? erase_sram[1] : ((rom_id==4 && !rom_addr[13]) || (rom_id==3 && rom_addr[13]))))
-);
-
-wire [7:0] bank6Data;
-rom_mem #(8,13) bank_6000
-(
-   .clock_a(clk_sys),
-   .address_a(systemAddr),
-   .q_a(bank6Data),
-   .data_a(cpuDo),
-   .wren_a(systemWe & extbankram[3] & cs_bank6),
-
-   .clock_b(clk_sys),
-   .address_b(rom_addr),
-   .data_b(rom_data),
-   .wren_b(rom_wr && (extbankram[3] ? erase_sram[1] : ((rom_id==5 && !rom_addr[13]) || (rom_id==4 && rom_addr[13]))))
-);
-
-wire [7:0] romLPData;
-rom_mem #(8,14,"rtl/roms/basic.901235+6-02.mif") rom_lang_p
-(
-   .clock_a(clk_sys),
-   .address_a(systemAddr),
-   .q_a(romLPData),
-
-   .clock_b(clk_sys)
-   // .address_b(rom_addr),
-   // .data_b(rom_data),
-   // .wren_b(rom_wr & rom_id==2)
-);
-
-wire [7:0] romLB128Data;
-rom_mem #(8,14,"rtl/roms/basic.901242+3-04a.mif") rom_lang_b128
-(
-   .clock_a(clk_sys),
-   .address_a(systemAddr),
-   .q_a(romLB128Data),
-
-   .clock_b(clk_sys)
-   // .address_b(rom_addr),
-   // .data_b(rom_data),
-   // .wren_b(rom_wr & rom_id==4)
-);
-
-wire [7:0] romLB256Data;
-rom_mem #(8,14,"rtl/roms/basic-901240+1-03.mif") rom_lang_b256
-(
-   .clock_a(clk_sys),
-   .address_a(systemAddr),
-   .q_a(romLB256Data),
-
-   .clock_b(clk_sys)
-   // .address_b(rom_addr),
-   // .data_b(rom_data),
-   // .wren_b(rom_wr & rom_id==5)
-);
-
-wire [7:0] romCPData;
-rom_mem #(8,12,"rtl/roms/characters.901225-01.mif") rom_char_p
-(
-   .clock_a(clk_sys),
-   .address_a(systemAddr),
-   .q_a(romCPData),
-
-   .clock_b(clk_sys)
-   // .address_b(rom_addr),
-   // .data_b(rom_data),
-   // .wren_b(rom_wr & rom_id==11 & !rom_addr[13:12])
-);
-
-wire [7:0] romKPData;
-rom_mem #(8,13,"rtl/roms/kernal.901234-02.mif") rom_kernal_p
-(
-   .clock_a(clk_sys),
-   .address_a(systemAddr),
-   .q_a(romKPData),
-
-   .clock_b(clk_sys)
-   // .address_b(rom_addr),
-   // .data_b(rom_data),
-   // .wren_b(rom_wr & rom_id==3 & !rom_addr[13])
-);
-
-wire [7:0] romKBData;
-rom_mem #(8,13,"rtl/roms/kernal.901244-04a.mif") rom_kernal_b
-(
-   .clock_a(clk_sys),
-   .address_a(systemAddr),
-   .q_a(romKBData),
-
-   .clock_b(clk_sys)
-   // .address_b(rom_addr),
-   // .data_b(rom_data),
-   // .wren_b(rom_wr & rom_id==6 & !rom_addr[13])
-);
-
-wire [7:0] sramData;
-sram #(8,13) sram (
-   .clock_a(clk_sys),
-   .wren_a   (erase_sram ? rom_wr   : systemWe & cs_sram),
-   .address_a(erase_sram ? rom_addr : systemAddr),
-   .data_a   (erase_sram ? rom_data : cpuDo),
-   .q_a(sramData)
-);
-
-wire [7:0] vidData;
-sram #(8,11) videoram (
-   .clock_a(clk_sys),
-   .wren_a   (erase_sram ? rom_wr   : systemWe & cs_vidram),
-   .address_a(erase_sram ? rom_addr : systemAddr),
-   .data_a   (erase_sram ? rom_data : cpuDo),
-   .q_a(vidData)
-);
-
+reg        cs_colram;
 wire [3:0] colData;
 sram #(4,10) colorram (
    .clock_a(clk_sys),
-   .wren_a   (erase_sram ? rom_wr   : systemWe & cs_colram),
-   .address_a(erase_sram ? rom_addr : systemAddr),
-   .data_a   (erase_sram ? rom_data : cpuDo),
+   .wren_a   (erase_colram | (systemWe & cs_colram)),
+   .address_a(erase_colram ? erase_colram_addr : systemAddr),
+   .data_a   (erase_colram ? {4{erase_colram_addr[6]}} : cpuDo),
    .q_a(colData)
 );
 
@@ -275,7 +131,7 @@ always @(*) begin
    cs_tpi1 <= 0;
    cs_tpi2 <= 0;
 
-   if (cpuSeg == 15 && cpuAddr[15:11] == 5'b11011) // Segment 15, $DFFF-$D000
+   if (cpuSeg == 15 && cpuAddr[15:11] == 5'b11011) // Segment 15, $DFFF-$D800
       case(cpuAddr[10:8])
          3'b000: if (!model) cs_vic    <= 1; // VIC (P2)
                  else        cs_crtc   <= 1; // CRTC (B2)
@@ -296,34 +152,50 @@ always @(*) begin
    systemWe <= 0;
 
    cs_ram <= 0;
-   cs_sram <= 0;
-   cs_vidram <= 0;
    cs_colram <= 0;
-   cs_bank2 <= 0;
-   cs_bank4 <= 0;
-   cs_bank6 <= 0;
-   cs_rom8 <= 0;
-   cs_romC <= 0;
-   cs_romE <= 0;
 
    // CPU or CoCPU
    if (cpuCycle) begin
-      systemAddr[23:0] <= {cpuSeg, cpuAddr};
+      systemAddr <= {1'b0, cpuSeg, cpuAddr};
       systemWe <= cpuWe & cpuCycle;
 
       if (cpuSeg == 15) begin
          case(cpuAddr[15:12])
-            4'h0      : if (!cpuAddr[11] || ipcEn || extbankram[0]) cs_sram <= 1;
-            4'h1      : if (extbankram[0])                  cs_sram <= 1;
-            4'h2, 4'h3: if (extbankram[1] || extbankrom[1]) cs_bank2 <= 1;
-            4'h4, 4'h5: if (extbankram[2] || extbankrom[2]) cs_bank4 <= 1;
-            4'h6, 4'h7: if (extbankram[3] || extbankrom[3]) cs_bank6 <= 1;
-            4'h8, 4'h9, 4'hA, 4'hB: cs_rom8 <= 1;
-            4'hC      : if (!model) cs_romC <= 1;
-            4'hD      : if (!cpuAddr[11]) begin
-                           if (!cpuAddr[10] || model) cs_vidram <= 1; else cs_colram <= 1;
+            4'h0      : if (!cpuAddr[11] || ipcEn || extbankram[0])
+                           cs_ram <= 1;
+            4'h1      : if (extbankram[0])
+                           cs_ram <= 1;
+            4'h2, 4'h3,
+            4'h4, 4'h5,
+            4'h6, 4'h7: if (extbankram[cpuAddr[14:13]])
+                           cs_ram <= 1;
+                        else if (extbankrom[cpuAddr[14:13]]) begin
+                           systemAddr[24:16] <= 9'h103;
+                           systemWe <= 0;
+                           cs_ram <= 1;
                         end
-            4'hE, 4'hF: cs_romE <= 1;
+            4'h8, 4'h9, 
+            4'hA, 4'hB: begin
+                           systemAddr[24:14] <= {modelRomBank, 1'b0, |ramSize};
+                           systemWe <= 0;
+                           cs_ram <= 1;
+                        end
+            4'hC      : if (!model) begin
+                           systemAddr[24:13] <= {modelRomBank, 3'b101};
+                           systemWe <= 0;
+                           cs_ram <= 1;
+                        end
+            4'hD      : if (!cpuAddr[11]) begin
+                           if (!cpuAddr[10] || model) 
+                              cs_ram <= 1; 
+                           else 
+                              cs_colram <= 1;
+                        end
+            4'hE, 4'hF: begin
+                           systemAddr[24:13] <= {modelRomBank, 3'b100};
+                           systemWe <= 0;
+                           cs_ram <= 1;
+                        end
             default: ;
          endcase
       end
@@ -338,14 +210,14 @@ always @(*) begin
    // VIC
    if (vidCycle && !model) begin
       if (vicdotsel && !phase) begin
-         // Character ROM, Seg 15 $CFFF-$C000
-         systemAddr[11:0] <= vicAddr[11:0];
-         cs_romC <= 1;
+         // Character ROM
+         systemAddr <= {modelRomBank, 4'hA, vicAddr[11:0]};
+         cs_ram <= 1;
       end
       else if (statvid && phase) begin
          // 4k Static video RAM, Seg 15 $D3FF-$D000
-         systemAddr[9:0] <= vicAddr[9:0];
-         cs_vidram <= 1;
+         systemAddr <= {13'h00FD, 2'b00, vicAddr[9:0]};
+         cs_ram <= 1;
       end
       else if (dramon) begin
          // Seg 0
@@ -357,8 +229,8 @@ always @(*) begin
    // CRTC
    if (vidCycle && model) begin
       // 8k Static video RAM, Seg 15 $D7FF-$D000
-      systemAddr[10:0] <= crtcAddr;
-      cs_vidram <= 1;
+      systemAddr <= {13'h00FD, 1'b0, crtcAddr};
+      cs_ram <= 1;
    end
 end
 
@@ -386,22 +258,6 @@ always @(*) begin
    if (cpuCycle)
       if (cs_ram)
          cpuDi <= ramData;
-      else if (cs_sram)
-         cpuDi <= sramData;
-      else if (cs_bank2)
-         cpuDi <= bank2Data;
-      else if (cs_bank4)
-         cpuDi <= bank4Data;
-      else if (cs_bank6)
-         cpuDi <= bank6Data;
-      else if (cs_rom8)
-         cpuDi <= model ? (ramSize == 0 ? romLB128Data : romLB256Data) : romLPData;
-      else if (cs_romC && !model)
-         cpuDi <= romCPData;
-      else if (cs_romE)
-         cpuDi <= model ? romKBData : romKPData;
-      else if (cs_vidram)
-         cpuDi <= vidData;
       else if (cs_colram)
          cpuDi[3:0] <= colData;
       else if (cs_vic)
@@ -422,13 +278,8 @@ always @(*) begin
          cpuDi <= tpi2Data;
 
    vidDi <= {colData, lastVidDi};
-   if (vidCycle)
-      if (cs_ram)
-         vidDi[7:0] <= ramData;
-      else if (cs_vidram)
-         vidDi[7:0] <= vidData;
-      else if (cs_romC)
-         vidDi[7:0] <= romCPData;
+   if (vidCycle && cs_ram)
+      vidDi[7:0] <= ramData;
 end
 
 endmodule

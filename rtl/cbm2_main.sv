@@ -79,11 +79,12 @@ module cbm2_main (
 
    output             sftlk_sense,
 
-   input        [1:0] erase_sram,
-   input        [5:0] rom_id,
-   input       [13:0] rom_addr,
-   input              rom_wr,
-   input        [7:0] rom_data
+   input              erase_colram,
+   input       [12:0] erase_colram_addr,
+
+   input              chrgen_wr,
+   input       [13:0] chrgen_addr,
+   input        [7:0] chrgen_data
 );
 
 typedef enum bit[4:0] {
@@ -330,18 +331,16 @@ mc6845 crtc (
 );
 
 reg [7:0] crtcDotD;
+rom_mem #(8,14) chargen
+(
+   .clock_a(clk_sys),
+   .address_a({profile, crtcMa[12], crtcGraphics, vidDi[6:0], crtcRa[3:0]}),
+   .q_a(crtcDotD),
 
-chargen chargen (
-   .clk_sys(clk_sys),
-
-   .profile(profile),
-   .dotA({crtcMa[12], crtcGraphics, vidDi[6:0], crtcRa[3:0]}),
-   .dotD(crtcDotD),
-
-   .rom_id(rom_id),
-   .rom_addr(rom_addr),
-   .rom_wr(rom_wr),
-   .rom_data(rom_data)
+   .clock_b(clk_sys),
+   .address_b(chrgen_addr),
+   .data_b(chrgen_data),
+   .wren_b(chrgen_wr)
 );
 
 reg crtcOut;
@@ -785,17 +784,11 @@ cbm2_buslogic buslogic (
    .clk_sys(clk_sys),
    .reset(reset),
 
-   .erase_sram(erase_sram),
-   .rom_id(rom_id),
-   .rom_addr(rom_addr),
-   .rom_wr(rom_wr),
-   .rom_data(rom_data),
-
    .phase(phase),
 
    .cpuCycle(cpu_cycle),
    .cpuAddr(cpuAddr),
-   .cpuSeg(cpuPO),
+   .cpuSeg(cpuPO[3:0]),
    .cpuDo(cpuDo),
    .cpuDi(cpuDi),
    .cpuWe(cpuWe),
