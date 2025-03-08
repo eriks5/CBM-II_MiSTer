@@ -372,13 +372,26 @@ wire  [7:0] crtcB = crtcOut ? 8'h00 : 8'h00;
 // Video mux
 // ============================================================================
 
-assign r      = model ? crtcR      : vicR;
-assign g      = model ? crtcG      : vicG;
-assign b      = model ? crtcB      : vicB;
-assign hsync  = model ? crtcHsync  : vicHSync;
-assign vsync  = model ? crtcVsync  : vicVSync;
-assign hblank = model ? crtcHblank : vicHSync;
-assign vblank = model ? crtcVblank : vicVSync;
+always @(posedge clk_sys) begin
+   if (model) begin
+      r      <= crtcR;
+      g      <= crtcG;
+      b      <= crtcB;
+      hsync  <= crtcHsync;
+      vsync  <= crtcVsync;
+      hblank <= crtcHblank;
+      vblank <= crtcVblank;
+   end 
+   else begin
+      r      <= vicR;
+      g      <= vicG;
+      b      <= vicB;
+      hsync  <= vicHSync;
+      vsync  <= vicVSync;
+      hblank <= vicHSync;
+      vblank <= vicVSync;
+   end
+end
 
 // ============================================================================
 // SID

@@ -1001,15 +1001,16 @@ always @(posedge CLK_VIDEO) begin
 	if (vsync_r == 'b01) begin
 		hq2x320 <= (status[20:18] == 1) || !model;
 		hq2x160 <= (status[20:18] == 2);
-		div <= 0;
+		div <= 2'd2;
 		lores <= 0;
-		ce_pix <= 0;
 	end
-	else begin
+	else
 		div <= div + 1'd1;
-		if (&div) lores <= lores + 1'd1;
-		ce_pix <= (~|lores | ~hq2x160) && (~lores[0] | ~hq2x320) && !div;
-	end
+
+	if (&div) 
+		lores <= lores + 1'd1;
+
+	ce_pix <= (~|lores | ~hq2x160) && (~lores[0] | ~hq2x320) && !div;
 end
 
 wire scandoubler = status[20:18] || forced_scandoubler;
