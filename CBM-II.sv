@@ -385,7 +385,7 @@ always @(posedge clk_sys) begin
 		reset_counter <= 100000;
 	end
 	else if (status[1] || buttons[1] || (ioctl_download && load_rom)) begin
-		do_erase <= (ioctl_download && load_rom) ? (status[14] ? 2'd1 : 2'd2) : 0;
+		do_erase <= (ioctl_download && load_rom) ? (status[14] ? 2'd1 : 2'd2) : 2'd0;
 		force_erase <= 0;
 		reset_counter <= 255;
 	end

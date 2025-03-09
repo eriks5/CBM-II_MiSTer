@@ -34,7 +34,7 @@ end fpga64_rgbcolor;
 
 architecture Behavioral of fpga64_rgbcolor is
 begin
-	process(index)
+	process(index, newVic)
 	begin
 		if newVic = '0' then
 			case index is
