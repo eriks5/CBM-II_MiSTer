@@ -368,32 +368,25 @@ always @(posedge CLK_50M) begin
 end
 
 reg reset_n;
-reg sys_reset_n;
+reg cancel_erase;
 reg reset_wait = 0;
 always @(posedge clk_sys) begin
 	integer   reset_counter;
 	reg [8:0] cfg_r;
-	reg       ntsc_r;
 	reg [1:0] do_erase = 2; // 0 - no, 1 - only sram seg 15 bank0+vidram, 2 - all ram
 
 	cfg_r <= status[10:2];
-	ntsc_r <= ntsc;
 
 	reset_n <= !reset_counter;
-	sys_reset_n <= !(reset_counter && do_erase);
+	cancel_erase <= reset_counter > 100;
 
 	if (RESET || (cfg_r != status[10:2]) || status[0] || !pll_locked) begin
-		if (RESET)
-			do_erase <= 2'd2;
-		else
-			do_erase <= status[14] ? 2'd1 : 2'd2;
-
+		do_erase <= (status[14] && !RESET) ? 2'd1 : 2'd2;
 		reset_counter <= 100000;
 	end
-	else if (status[1] || buttons[1])
-		reset_counter <= 255;
-	else if (ioctl_download && load_rom) begin
-		do_erase <= status[14] ? 2'd1 : 2'd2;
+	else if (status[1] || buttons[1] || (ioctl_download && load_rom)) begin
+		do_erase <= (ioctl_download && load_rom) ? (status[14] ? 2'd1 : 2'd2) : 0;
+		force_erase <= 0;
 		reset_counter <= 255;
 	end
 	else if (erasing) force_erase <= 0;
@@ -588,7 +581,7 @@ always @(posedge clk_sys) begin
 
 	if (io_cycle & ~io_cycleD) io_cycle_ce <= 0;
 
-	if (ioctl_wr) begin
+	if (ioctl_wr && !erasing && !force_erase) begin
 		if (load_rom_2000) begin
 			extbankrom[0] <= 1;
 			if (ioctl_addr == 0)
@@ -683,7 +676,8 @@ always @(posedge clk_sys) begin
 		end
 	end
 
-	if (!erasing && force_erase) begin
+	if (!erasing && force_erase && !cancel_erase) begin
+		erase_to <= 0;
 		erasing <= force_erase;
 		if (force_erase == 2)
 			ioctl_load_addr <= model ? 25'h01_0000 : 25'h00_0000;
@@ -710,6 +704,11 @@ always @(posedge clk_sys) begin
 				ioctl_req_wr <= 0;
 			end
 		end
+	end
+
+	if (erasing && cancel_erase) begin
+		erasing <= 0;
+		ioctl_req_wr <= 0;
 	end
 end
 
@@ -820,7 +819,7 @@ cbm2_main main (
 	.clk_sys(clk_sys),
 	.reset_n(reset_n),
 
-	.kbd_reset(~sys_reset_n & ~status[13]),
+	.kbd_reset(~reset_n & ~status[13]),
 	.ps2_key(ps2_key),
 
 	.joy_en(joy_en),
@@ -878,7 +877,7 @@ cbm2_main main (
 // IEEE
 // ========================================================================
 
-wire drive_reset = ~sys_reset_n | status[44];
+wire drive_reset = ~reset_n | status[44];
 wire [1:0] drive_led;
 
 reg [3:0] drive_mounted = 0;
