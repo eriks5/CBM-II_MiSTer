@@ -191,7 +191,7 @@ localparam NDRIVES=2;
 // 0         1         2         3          4         5         6
 // 01234567890123456789012345678901 23456789012345678901234567890123
 // 0123456789ABCDEFGHIJKLMNOPQRSTUV 0123456789ABCDEFGHIJKLMNOPQRSTUV
-// XXXXXXX  XXXXXXXXXXXXXXX XXXXXXX XXXXXXXXXX  XXXXXXXX
+// XXXXXXX  XXXXXXXXXXXXXXXXXXXXXXX XXXXXXXXXX  XXXXXXXX
 
 `include "build_id.v"
 localparam CONF_STR = {
@@ -262,6 +262,9 @@ localparam CONF_STR = {
 	"P3-,Drive ROM;",
 	"P3FC7,ROMBIN, 4040            ;",
 	"P3FC8,ROMBIN, 8250            ;",
+	"P3-;",
+	"P3-,Load options;",
+	"P3O[24], Ignore PRG start,Yes,No;",
 
 	"-;",
  	"R[0],Hard reset;",
@@ -549,6 +552,7 @@ reg  [7:0] io_cycle_data;
 
 reg        chrgen_wr;
 reg  [2:0] extbankrom = 0;
+reg        prg_freeze;
 
 always @(posedge clk_sys) begin
 	reg  [4:0] erase_to;
@@ -564,7 +568,7 @@ always @(posedge clk_sys) begin
 	if (~io_cycle & io_cycleD) begin
 		io_cycle_ce <= 1;
 		io_cycle_we <= 0;
-		if (ioctl_req_wr) begin
+		if (ioctl_req_wr && ((!load_prg && !inj_meminit) || freeze)) begin
 			ioctl_req_wr <= 0;
 			io_cycle_we <= 1;
 			io_cycle_addr <= ioctl_load_addr;
@@ -627,15 +631,16 @@ always @(posedge clk_sys) begin
 		end
 		else if (load_prg) begin
 			if (ioctl_addr == 0) begin
-				ioctl_load_addr[24:16] <= model ? 9'd1 : 9'd0;
-				ioctl_load_addr[7:0] <= ioctl_data;
-				inj_start[7:0] <= ioctl_data;
-				inj_end[7:0] <= ioctl_data;
+				prg_freeze <= 1;
+				ioctl_load_addr[7:0]  <= status[24] ? ioctl_data : 8'h03;
+				inj_start[7:0]        <= status[24] ? ioctl_data : 8'h03;
+				inj_end[7:0]          <= status[24] ? ioctl_data : 8'h03;
 			end
 			else if (ioctl_addr == 1) begin
-				ioctl_load_addr[15:8] <= ioctl_data;
-				inj_start[15:8] <= ioctl_data;
-				inj_end[15:8] <= ioctl_data;
+				ioctl_load_addr[24:16]<= model ? 9'd1 : 9'd0;
+				ioctl_load_addr[15:8] <= status[24] ? ioctl_data : 8'h00;
+				inj_start[15:8]       <= status[24] ? ioctl_data : 8'h00;
+				inj_end[15:8]         <= status[24] ? ioctl_data : 8'h00;
 			end
 			else begin
 				ioctl_req_wr <= 1;
@@ -645,7 +650,7 @@ always @(posedge clk_sys) begin
 	end
 
 	// meminit for RAM injection
-	if (old_download != ioctl_download && load_prg && !inj_meminit) begin
+	if (old_download && !ioctl_download && load_prg && !inj_meminit) begin
 		inj_meminit <= 1;
 		ioctl_load_addr <= 25'h00F_0000;
 	end
@@ -653,20 +658,23 @@ always @(posedge clk_sys) begin
 	if (inj_meminit && !ioctl_req_wr) begin
 		if (ioctl_load_addr[8]) begin
 			inj_meminit <= 0;
-			// start_strk <= 1;
+			prg_freeze <= 0;
 		end
 		else begin
 			ioctl_req_wr <= 1;
 
 			// Initialize BASIC pointers to simulate the BASIC LOAD command
 			case(ioctl_load_addr[7:0])
-				// TXTTAB (2D-2E)
-				'h2D: inj_meminit_data <= inj_start[7:0];
-				'h2E: inj_meminit_data <= inj_start[15:8];
+				// TXTTAB (2D-2E), BUFFPT (99-9B)
+				'h2D, 'h99: inj_meminit_data <= inj_start[7:0];
+				'h2E, 'h9A: inj_meminit_data <= inj_start[15:8];
 
-				// TXTEND (2F-30)
-				'h2F: inj_meminit_data <= inj_end[7:0];
-				'h30: inj_meminit_data <= inj_end[15:8];
+				// TXTEND (2F-30), TXTPTR (96-98)
+				'h2F, 'h96: inj_meminit_data <= inj_end[7:0];
+				'h30, 'h97: inj_meminit_data <= inj_end[15:8];
+
+				// BUFFPT/TXTPTR bank 
+				'h98, 'h9B: inj_meminit_data <= model ? 8'd1 : 8'd0;
 
 				default: begin
 					ioctl_req_wr <= 0;
@@ -1087,7 +1095,7 @@ always @(posedge clk_sys) begin
 	reg old_sync;
 
 	old_sync <= freeze_sync;
-	if(old_sync ^ freeze_sync) freeze <= OSD_STATUS & status[15];
+	if(old_sync ^ freeze_sync) freeze <= (OSD_STATUS & status[15]) | prg_freeze;
 end
 
 assign HDMI_FREEZE = freeze;
