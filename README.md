@@ -62,17 +62,6 @@ of Basic 128.
 From the "ROM/RAM Configuration" menu custom system ROMs can be loaded, these have the same layout as
 the boot ROMs described above.
 
-From that menu it is also possible to load custom ROMs for the 4040 and 8250 disk drives. The layout 
-of these ROMs is as follows:
-
-* `0000`-`3FFF` DOS ROM *(16 KiB)*
-* `4000`-`47FF` Controller ROM *(2 KiB)*
-
-The DOS ROM can be up to 16 KiB, however the standard 4040 DOS ROM is only 12 KiB.
-In that case, the first 4 KiB of the ROM should be padded with `FF` bytes to align the ROM properly.
-When the Controller ROM is only 1 KiB, the first 1 KiB should be padded with `FF` bytes to align the
-ROM properly.
-
 ## Acknowlegements
 
 This core could not exist without the following projects:

@@ -259,10 +259,10 @@ localparam CONF_STR = {
 	"P3O[41], $6000-7FFF,ROM,RAM;",
 	"D9P3FC6,ROMBIN,  Load;",
 	"P3-;",
-	"P3-,Drive ROM;",
-	"P3FC7,ROMBIN, 4040            ;",
-	"P3FC8,ROMBIN, 8250            ;",
-	"P3-;",
+	// "P3-,Drive ROM;",
+	// "P3FC7,ROMBIN, 4040            ;",
+	// "P3FC8,ROMBIN, 8250            ;",
+	// "P3-;",
 	"P3-,Load options;",
 	"P3O[24], Ignore PRG start,Yes,No;",
 
@@ -514,8 +514,8 @@ wire load_rom_b7x0 = ioctl_index == 3 || ioctl_index == {2'd2, 6'd0};
 wire load_rom_2000 = ioctl_index == 4;
 wire load_rom_4000 = ioctl_index == 5;
 wire load_rom_6000 = ioctl_index == 6;
-wire load_drv_4040 = ioctl_index == 7;
-wire load_drv_8250 = ioctl_index == 8;
+// wire load_drv_4040 = ioctl_index == 7;
+// wire load_drv_8250 = ioctl_index == 8;
 wire load_prg      = ioctl_index == 9;
 
 // System configuration
@@ -925,12 +925,12 @@ ieee_drive #(.DRIVES(NDRIVES)) ieee_drive
 
 	.img_mounted(img_mounted),
 	.img_readonly(img_readonly),
-	.img_size(img_size),
+	.img_size(img_size)
 
-	.rom_wr((load_drv_4040 || load_drv_8250) && ioctl_download && ioctl_wr && !ioctl_addr[24:15]),
-	.rom_sel(load_drv_4040),
-	.rom_addr(ioctl_addr[14:0]),
-	.rom_data(ioctl_data)
+	// .rom_wr((load_drv_4040 || load_drv_8250) && ioctl_download && ioctl_wr && !ioctl_addr[24:15]),
+	// .rom_sel(load_drv_4040),
+	// .rom_addr(ioctl_addr[14:0]),
+	// .rom_data(ioctl_data)
 );
 
 // ========================================================================
