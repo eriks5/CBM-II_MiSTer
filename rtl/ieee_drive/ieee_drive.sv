@@ -90,7 +90,7 @@ st_ieee_bus drv_bus[NDR];
 
 ieeedrv_bus_sync bus_sync(clk_sys, bus_i, drv_bus_i);
 
-wire [NS:0] led_act[NBD];
+wire [NS:0] led_act[NDR];
 wire [ND:0] led_err;
 wire        blink_err = err_count[21];
 
