@@ -62,6 +62,30 @@ of Basic 128.
 From the "ROM/RAM Configuration" menu custom system ROMs can be loaded, these have the same layout as
 the boot ROMs described above.
 
+## External Cartridge ROM
+
+A CBM-II can have up to 3 external cartridge ROMs installed. In the core, this is configured from the
+"ROM/RAM Configuration" menu.
+
+An external ROM is installed in segment 15 on address `$2000`, `$4000` or `$6000`.
+External ROMs are generally designed to load into a specific slot. Refer to the ROM's
+documentation to find out to which address the ROM should be loaded.
+Most external ROMs will only work on either the P500 or B6xx/B7xx models, not both,
+so select the proper model before loading the ROM.
+
+To load an external ROM, go to the "ROM/RAM Configuration" menu, set the correct slot to "ROM",
+and select "Load" for that slot to load the file.
+
+## Segment 15 RAM
+
+Besides loading external ROM into the slots in segment 15, the core also supports
+adding RAM in these slots. This external RAM can be used by some programs.
+
+External RAM can be activated in slots `$0800-$1FFF`, `$2000-$3FFF`, `$4000-$5FFF` and 
+`$6000-$7FFF`.
+To activate external RAM in a specific slot, set the slot to 'RAM' in the "ROM/RAM Configuration"
+menu.
+
 ## Acknowlegements
 
 This core could not exist without the following projects:
